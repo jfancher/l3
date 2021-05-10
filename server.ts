@@ -41,7 +41,7 @@ router.post("/invoke/:plugin/:func", async (ctx) => {
   let host = plugins.get(name);
   if (!host) {
     host = new PluginHost();
-    await host.load(`${Deno.cwd()}/${name}/mod.ts`);
+    await host.load(`file://${Deno.cwd()}/${name}/mod.ts`);
     plugins.set(name, host);
   }
 
