@@ -1,4 +1,7 @@
-import { assertEquals } from "https://deno.land/std@0.95.0/testing/asserts.ts";
+import {
+  assertArrayIncludes,
+  assertEquals,
+} from "https://deno.land/std@0.95.0/testing/asserts.ts";
 import * as path from "https://deno.land/std@0.95.0/path/mod.ts";
 import { analyze, PluginMetadata } from "./analysis.ts";
 
@@ -75,8 +78,13 @@ function analyzeTest(name: string, testCase: TestCase) {
     fn: () => {
       const dir = path.dirname(new URL(import.meta.url).pathname);
       const actual = analyze(path.join(dir, "testdata", name));
-      assertEquals(actual.diagnostics, testCase.diagnostics ?? []);
-      assertEquals(actual.functions, testCase.functions ?? []);
+      assertElementsEqual(actual.diagnostics, testCase.diagnostics ?? []);
+      assertElementsEqual(actual.functions, testCase.functions ?? []);
     },
   });
+}
+
+function assertElementsEqual<T>(actual: ArrayLike<T>, expected: ArrayLike<T>) {
+  assertArrayIncludes(actual, expected);
+  assertEquals(actual.length, expected.length);
 }
