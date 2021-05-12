@@ -74,7 +74,8 @@ type TestCase = Partial<PluginMetadata & { ignore: boolean }>;
 function analyzeTest(name: string, testCase: TestCase) {
   Deno.test({
     name: `analyze ${name}`,
-    ignore: testCase.ignore,
+    // TODO: Fix paths to work on Windows.
+    ignore: testCase.ignore || Deno.build.os === "windows",
     fn: () => {
       const dir = path.dirname(new URL(import.meta.url).pathname);
       const actual = analyze(path.join(dir, "testdata", name));
