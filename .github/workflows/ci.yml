@@ -24,7 +24,7 @@ jobs:
           deno-version: "1.9.2"
 
       - name: Run tests
-        run: deno test --unstable --allow-all
+        run: deno test --allow-all
 
   lint:
     runs-on: ubuntu-latest
