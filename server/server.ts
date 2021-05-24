@@ -18,21 +18,21 @@ type Ctx = RouterContext<RouteParams, Record<string, unknown>>;
 
 /**
  * Serves a simple HTTP API for a plugin.
- * 
+ *
  * Exposes the following endpoints:
- * 
+ *
  * `GET /status`
- * 
+ *
  * Indicates whether or not the server is ready to serve invocation requests.
- * 
+ *
  * Returns a {@link StatusResponse}.
- * 
+ *
  * ---
- * 
+ *
  * `POST /invoke/:func`
- * 
+ *
  * Invokes a plugin function.
- * 
+ *
  * Returns an {@link InvokeResponse}.
  */
 export class Server {
@@ -46,7 +46,7 @@ export class Server {
 
   /**
    * Initializes a new plugin server.
-   * 
+   *
    * @param mod The plugin module path
    * @param port The server port
    */
@@ -159,10 +159,17 @@ export class Server {
 
   /** Formats an error value as part of a response. */
   #convertError = (e: unknown) => {
-    const err = (e instanceof Error) ? e : new Error(String(e));
-    const result: ErrorDetails = { name: err.name, message: err.message };
-    if (err.stack) {
-      result.stack = err.stack;
+    // TODO: clean this up
+    const result: ErrorDetails = { name: "Error", message: "" };
+    if (e instanceof Error) {
+      [result.name, result.message] = [e.name, e.message];
+      if (e.stack) {
+        result.stack = e.stack;
+      }
+    } else if (typeof e === "object") {
+      Object.assign(result, e);
+    } else {
+      result.message = String(e);
     }
     return result;
   };
