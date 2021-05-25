@@ -20,7 +20,7 @@ export interface StatusResponse {
   error?: ErrorDetails;
 }
 
-/** Maps server status strings tp HTTP status codes. */
+/** Maps server status strings to HTTP status codes. */
 export const SERVER_STATUS = {
   "OK": 200,
   "Loading": 503,
