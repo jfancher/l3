@@ -43,7 +43,7 @@ export class PluginHost {
               result.value = e.data.value;
             }
             if ("error" in e.data) {
-              result.error = e.data.error
+              result.error = e.data.error;
             }
             p.resolve(result);
             this.#invoked.delete(e.data.cid);
