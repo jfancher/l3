@@ -1,27 +1,10 @@
+import { ErrorDetails, InvokeResult, LoadResult } from "./result.ts";
+
 /** A message used to communicate with the worker. */
 export type PluginMessage = LoadMessage | InvokeMessage | CloseMessage;
 
 /** The result of of a `PluginMessage` operation. */
-export type PluginResult = LoadResult | InvokeResult;
-
-/**
- * A serializable error object.
- * 
- * @remarks
- * Used as a plain object, not an actual Error. Error types are said to support structured cloning
- * in v8, but that doesn't seem to be the case in Deno. Errors are converted to a plain object to
- * successfully pass through `postMessage`.
- */
-export interface PluginError {
-  /** The error name. */
-  name: string;
-
-  /** The error message. */
-  message: string;
-
-  /** The error call stack. */
-  stack?: string;
-}
+export type PluginResultMessage = LoadResultMessage | InvokeResultMessage;
 
 /**
  * A request to load a plugin module into the worker.
@@ -40,19 +23,16 @@ export interface LoadMessage {
 /**
  * The result of loading a plugin.
  */
-export interface LoadResult {
+export interface LoadResultMessage extends LoadResult {
   /** Specifies the kind of the message. */
   kind: "load";
-
-  /** The load error, if any. */
-  error?: PluginError;
 }
 
 /**
  * A request to invoke a plugin function.
  * 
  * A plugin must be loaded before any plugin functions are invoked; otherwise an error will be
- * returned. The result will be posted as an `InvokeResult`.
+ * returned. The result will be posted as an `InvokeResultMessage`.
  */
 export interface InvokeMessage {
   /** Specifies the kind of the message. */
@@ -71,18 +51,12 @@ export interface InvokeMessage {
 /**
  * The result of invoking a plugin function.
  */
-export interface InvokeResult {
+export interface InvokeResultMessage extends InvokeResult {
   /** Specifies the kind of the message. */
   kind: "invoke";
 
   /** The correlation id passed in with the `InvokeMessage`. */
   cid: string;
-
-  /** The return value of the function. */
-  value?: unknown;
-
-  /** The invocation error, if any. */
-  error?: PluginError;
 }
 
 /**
@@ -125,56 +99,64 @@ self.onmessage = async (e: MessageEvent<PluginMessage>) => {
   }
 };
 
-async function load(msg: LoadMessage): Promise<LoadResult> {
-  const result: LoadResult = { kind: "load" };
+async function load(msg: LoadMessage): Promise<LoadResultMessage> {
+  const result: LoadResultMessage = {
+    kind: "load",
+    success: false,
+    functionNames: [],
+  };
 
   if (plugin) {
-    result.error = pluginError("plugin is already loaded");
+    result.error = createError("plugin is already loaded");
     return result;
   }
 
   try {
     plugin = await import(msg.module);
+    result.success = true;
+    for (const fn in plugin) {
+      if (plugin[fn] instanceof Function) {
+        result.functionNames.push(fn);
+      }
+    }
   } catch (e) {
-    result.error = pluginError(e);
+    result.error = createError(e);
   }
   return result;
 }
 
-function invoke(msg: InvokeMessage): InvokeResult {
-  const result: InvokeResult = { kind: "invoke", cid: msg.cid };
+function invoke(msg: InvokeMessage): InvokeResultMessage {
+  const result: InvokeResultMessage = { kind: "invoke", cid: msg.cid };
 
   if (!plugin) {
-    result.error = pluginError("plugin is not loaded");
+    result.error = createError("plugin is not loaded");
     return result;
   }
 
   const fn = plugin[msg.function];
   if (!(fn instanceof Function)) {
-    result.error = pluginError(
-      `missing or invalid function "${msg.function}"`,
-    );
+    result.error = createError(`missing or invalid function "${msg.function}"`);
     return result;
   }
 
   try {
     result.value = fn(msg.argument);
   } catch (e) {
-    result.error = pluginError(e);
+    result.error = createError(e);
   }
   return result;
 }
 
 /**
- * Creates a PluginError that can be posted back to the host.
+ * Creates a ErrorDetails object.
  * 
  * @param e The error object or message
- * @returns The plugin error
+ * @param name The error name
+ * @returns The error
  */
-function pluginError(e: unknown) {
-  // TODO: is there a more standard/general way to do this?
+function createError(e: unknown) {
   const err = (e instanceof Error) ? e : new Error(String(e));
-  const result: PluginError = { name: err.name, message: err.message };
+  const result: ErrorDetails = { name: err.name, message: err.message };
   if (err.stack) {
     result.stack = err.stack;
   }
