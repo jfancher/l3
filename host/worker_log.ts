@@ -1,6 +1,9 @@
 import { LevelName, setup } from "https://deno.land/std@0.95.0/log/mod.ts";
 import { LogRecord as BaseLogRecord } from "https://deno.land/std@0.95.0/log/logger.ts";
-import { BaseHandler, ConsoleHandler } from "https://deno.land/std@0.95.0/log/handlers.ts";
+import {
+  BaseHandler,
+  ConsoleHandler,
+} from "https://deno.land/std@0.95.0/log/handlers.ts";
 import { LogRecord } from "./result.ts";
 
 /** A log handler which stores log records in a buffer. */
@@ -41,13 +44,13 @@ export const logBuffer = new BufferLogHandler("DEBUG");
 await setup({
   handlers: {
     default: logBuffer,
-    console: new ConsoleHandler("INFO")
+    console: new ConsoleHandler("INFO"),
   },
 
   loggers: {
     default: {
       level: "DEBUG",
       handlers: ["default", "console"],
-    }
-  }
+    },
+  },
 });
