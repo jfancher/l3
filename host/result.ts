@@ -13,10 +13,13 @@ export interface LoadResult {
 /** The result of a function invocation. */
 export interface InvokeResult {
   /** The return value of the invocation. */
-  value?: unknown;
+  value: unknown;
 
   /** The error encountered, if any. */
   error?: ErrorDetails;
+
+  /** Any messages logged during the invocation. */
+  logs: LogRecord[];
 }
 
 /**
@@ -36,4 +39,16 @@ export interface ErrorDetails {
 
   /** The error call stack. */
   stack?: string;
+}
+
+/** A logged message. */
+export interface LogRecord {
+  /** The logger name. */
+  loggerName: string;
+
+  /** The log level. */
+  level: string;
+
+  /** The message. */
+  message: string;
 }
