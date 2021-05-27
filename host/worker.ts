@@ -1,4 +1,5 @@
 import { ErrorDetails, InvokeResult, LoadResult } from "./result.ts";
+import { logBuffer } from "./worker_log.ts";
 
 /** A message used to communicate with the worker. */
 export type PluginMessage = LoadMessage | InvokeMessage | CloseMessage;
@@ -126,7 +127,12 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
 }
 
 function invoke(msg: InvokeMessage): InvokeResultMessage {
-  const result: InvokeResultMessage = { kind: "invoke", cid: msg.cid };
+  const result: InvokeResultMessage = {
+    kind: "invoke",
+    cid: msg.cid,
+    value: undefined,
+    logs: [],
+  };
 
   if (!plugin) {
     result.error = createError("plugin is not loaded");
@@ -144,6 +150,7 @@ function invoke(msg: InvokeMessage): InvokeResultMessage {
   } catch (e) {
     result.error = createError(e);
   }
+  result.logs = logBuffer.take();
   return result;
 }
 

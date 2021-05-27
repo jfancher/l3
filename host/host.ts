@@ -38,10 +38,10 @@ export class PluginHost {
         case "invoke": {
           const p = this.#invoked.get(e.data.cid);
           if (p) {
-            const result: InvokeResult = {};
-            if ("value" in e.data) {
-              result.value = e.data.value;
-            }
+            const result: InvokeResult = {
+              value: e.data.value,
+              logs: e.data.logs,
+            };
             if ("error" in e.data) {
               result.error = e.data.error;
             }

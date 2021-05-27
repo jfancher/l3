@@ -1,6 +1,6 @@
-import { ErrorDetails } from "../host/result.ts";
+import { ErrorDetails, LogRecord } from "../host/result.ts";
 
-export type { ErrorDetails };
+export type { ErrorDetails, LogRecord };
 
 /** Response to a /status request. */
 export interface StatusResponse {
@@ -59,10 +59,13 @@ export interface InvokeResponse {
   status: keyof typeof INVOKE_STATUS;
 
   /** The function's return value, if successful. */
-  result?: unknown;
+  result: unknown;
 
   /** The invocation error, if any. */
   error?: ErrorDetails;
+
+  /** Any messages logged during the invocation. */
+  logs: LogRecord[];
 }
 
 /** Maps invoke status strings to HTTP status codes. */

@@ -116,6 +116,8 @@ export class Server {
       module: this.#mod,
       functionName: func ?? "",
       status: "OK",
+      result: undefined,
+      logs: [],
     };
     ctx.response.body = body;
 
@@ -163,6 +165,7 @@ export class Server {
     try {
       const result = await this.#host.invoke(func, arg);
       body.result = result.value;
+      body.logs = result.logs;
       if (result.error) {
         fail("RuntimeError", result.error);
       }
