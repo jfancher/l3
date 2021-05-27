@@ -5,6 +5,6 @@ Deno.test("invoke success", async () => {
   const host = new PluginHost();
   await host.load("./testdata/simple_plugin.ts");
   const result = await host.invoke("fn", { name: "test" });
-  assertEquals(result, { message: "name: test" });
+  assertEquals(result, { value: { message: "name: test" } });
   host.close();
 });

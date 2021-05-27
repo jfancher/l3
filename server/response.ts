@@ -1,3 +1,7 @@
+import { ErrorDetails } from "../host/result.ts";
+
+export type { ErrorDetails };
+
 /** Response to a /status request. */
 export interface StatusResponse {
   /** The plugin module. */
@@ -18,6 +22,9 @@ export interface StatusResponse {
 
   /** The plugin load error, if any. */
   error?: ErrorDetails;
+
+  /** The available function names, if loading succeeded. */
+  functionNames: string[];
 }
 
 /** Maps server status strings to HTTP status codes. */
@@ -67,19 +74,3 @@ export const INVOKE_STATUS = {
   "RuntimeError": 500,
   "InternalError": 500,
 } as const;
-
-/**
- * Information about an error.
- * 
- * Currently equivalent to the Error interface, but expected to be a plain serializable object.
- */
-export interface ErrorDetails {
-  /** The error name. */
-  name: string;
-
-  /** The error message. */
-  message: string;
-
-  /** The error call stack. */
-  stack?: string;
-}

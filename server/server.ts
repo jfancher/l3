@@ -55,7 +55,7 @@ export class Server {
     this.#port = port;
     this.#host = new PluginHost();
     this.#running = false;
-    this.#status = { module: mod, status: "Loading" };
+    this.#status = { module: mod, status: "Loading", functionNames: [] };
     this.#abort = new AbortController();
     this.#loaded = deferred<void>();
   }
@@ -92,12 +92,13 @@ export class Server {
 
   /** Loads the plugin module. */
   #load = async () => {
-    try {
-      await this.#host.load(this.#mod);
+    const result = await this.#host.load(this.#mod);
+    if (result.success) {
       this.#status.status = "OK";
-    } catch (e) {
+      this.#status.functionNames = result.functionNames;
+    } else {
       this.#status.status = "Failed";
-      this.#status.error = this.#convertError(e);
+      this.#status.error = result.error;
     }
     this.#loaded.resolve();
   };
@@ -118,9 +119,15 @@ export class Server {
     };
     ctx.response.body = body;
 
-    const fail = (s: keyof typeof INVOKE_STATUS, err: unknown) => {
+    const fail = (s: keyof typeof INVOKE_STATUS, err: Error | ErrorDetails) => {
       body.status = s;
-      body.error = this.#convertError(err);
+      body.error = err;
+      if (err instanceof Error) {
+        body.error = { name: err.name, message: err.message };
+        if (err.stack) {
+          body.error.stack = err.stack;
+        }
+      }
       ctx.response.status = INVOKE_STATUS[s];
     };
 
@@ -134,7 +141,7 @@ export class Server {
         fail("Unavailable", new Error("module is loading"));
         return;
       case "Failed":
-        fail("Unavailable", this.#status.error);
+        fail("Unavailable", this.#status.error!);
         return;
     }
 
@@ -143,34 +150,26 @@ export class Server {
       const body = ctx.request.body({ type: "json" });
       arg = await body.value;
     } catch (e) {
-      fail("InvalidArgument", e);
+      const err = (e instanceof Error) ? e : new Error(String(e));
+      fail("InvalidArgument", err);
       return;
     }
 
-    // TODO: check whether function exists first
+    if (!this.#status.functionNames.includes(func)) {
+      fail("NotFound", new Error(`function "${func}" does not exist`));
+      return;
+    }
 
     try {
-      body.result = await this.#host.invoke(func, arg);
+      const result = await this.#host.invoke(func, arg);
+      body.result = result.value;
+      if (result.error) {
+        fail("RuntimeError", result.error);
+      }
     } catch (e) {
-      fail("RuntimeError", e);
+      const err = (e instanceof Error) ? e : new Error(String(e));
+      fail("InternalError", err);
       return;
     }
-  };
-
-  /** Formats an error value as part of a response. */
-  #convertError = (e: unknown) => {
-    // TODO: clean this up
-    const result: ErrorDetails = { name: "Error", message: "" };
-    if (e instanceof Error) {
-      [result.name, result.message] = [e.name, e.message];
-      if (e.stack) {
-        result.stack = e.stack;
-      }
-    } else if (typeof e === "object") {
-      Object.assign(result, e);
-    } else {
-      result.message = String(e);
-    }
-    return result;
   };
 }
