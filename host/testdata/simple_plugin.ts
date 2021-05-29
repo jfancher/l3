@@ -5,3 +5,7 @@ export function fn(arg: { name: string }): { message: string } {
   log.debug(arg);
   return { message: `name: ${arg.name}` };
 }
+
+export async function afn(s: string) {
+  return await Promise.resolve(`afn: ${s}`);
+}

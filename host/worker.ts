@@ -88,8 +88,7 @@ self.onmessage = async (e: MessageEvent<PluginMessage>) => {
       return;
     }
     case "invoke": {
-      // TODO: support async invoke?
-      const result = invoke(e.data);
+      const result = await invoke(e.data);
       self.postMessage(result);
       return;
     }
@@ -126,7 +125,7 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
   return result;
 }
 
-function invoke(msg: InvokeMessage): InvokeResultMessage {
+async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
   const result: InvokeResultMessage = {
     kind: "invoke",
     cid: msg.cid,
@@ -146,7 +145,7 @@ function invoke(msg: InvokeMessage): InvokeResultMessage {
   }
 
   try {
-    result.value = fn(msg.argument);
+    result.value = await Promise.resolve(fn(msg.argument));
   } catch (e) {
     result.error = createError(e);
   }

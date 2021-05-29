@@ -14,3 +14,14 @@ Deno.test("worker > invoke success", async () => {
   });
   host.close();
 });
+
+Deno.test("worker > invoke async", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/simple_plugin.ts");
+  const result = await host.invoke("afn", "str");
+  assertEquals(result, {
+    value: "afn: str",
+    logs: [],
+  });
+  host.close();
+});
