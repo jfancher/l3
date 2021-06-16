@@ -4,7 +4,7 @@ import {
   RouteParams,
   Router,
   RouterContext,
-} from "https://deno.land/x/oak@v7.3.0/mod.ts";
+} from "https://deno.land/x/oak@v7.5.0/mod.ts";
 import { PluginHost } from "../host/mod.ts";
 import {
   ErrorDetails,
