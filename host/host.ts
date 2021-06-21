@@ -33,18 +33,14 @@ export class PluginHost {
           return;
         }
         case "invoke": {
-          const p = this.#invoked.get(e.data.cid);
-          if (p) {
-            const result: InvokeResult = {
-              value: e.data.value,
-              logs: e.data.logs,
-            };
-            if ("error" in e.data) {
-              result.error = e.data.error;
-            }
-            p.resolve(result);
-            this.#invoked.delete(e.data.cid);
+          const result: InvokeResult = {
+            value: e.data.value,
+            logs: e.data.logs,
+          };
+          if ("error" in e.data) {
+            result.error = e.data.error;
           }
+          this.#completeInvoke(e.data.cid, result);
           return;
         }
       }
@@ -72,15 +68,29 @@ export class PluginHost {
    *
    * @param func The function name
    * @param argument The argument
+   * @param opts Configures the invocation
    * @returns The function result
    */
-  async invoke(func: string, argument: unknown): Promise<InvokeResult> {
+  async invoke(
+    func: string,
+    argument: unknown,
+    opts?: InvokeOptions,
+  ): Promise<InvokeResult> {
     if (this.#state !== "active") {
       throw new Error("invalid host state");
     }
     const cid = uuidV4.generate();
     const res = deferred<InvokeResult>();
     this.#invoked.set(cid, res);
+
+    opts?.signal?.addEventListener("abort", () => {
+      this.#completeInvoke(cid, {
+        error: {
+          name: "AbortError",
+          message: "Invocation was aborted",
+        },
+      });
+    });
 
     const msg: InvokeMessage = {
       kind: "invoke",
@@ -91,6 +101,22 @@ export class PluginHost {
     this.#worker.postMessage(msg);
     return await res;
   }
+
+  /** Resolves an invocation promise and removes it from the in-progress map. */
+  #completeInvoke = (cid: string, result: Partial<InvokeResult>) => {
+    const p = this.#invoked.get(cid);
+    if (p) {
+      const r: InvokeResult = {
+        value: result.value ?? undefined,
+        logs: result.logs ?? [],
+      };
+      if (result.error) {
+        r.error = result.error;
+      }
+      p.resolve(r);
+      this.#invoked.delete(cid);
+    }
+  };
 
   /** Shuts down the host after any in-flight requests complete. */
   async shutdown() {
@@ -106,11 +132,22 @@ export class PluginHost {
   terminate() {
     if (this.#state !== "closed") {
       this.#state = "closed";
-      for (const [_, p] of this.#invoked) {
-        p.reject(new Error("worker terminated"));
+      for (const cid of this.#invoked.keys()) {
+        this.#completeInvoke(cid, {
+          error: {
+            name: "TerminateError",
+            message: "Worker was terminated",
+          },
+        });
       }
       this.#invoked.clear();
       this.#worker.terminate();
     }
   }
+}
+
+/** Configures a plugin invocation. */
+export interface InvokeOptions {
+  /** An signal that can cancel the invocation. */
+  signal?: AbortSignal | null;
 }

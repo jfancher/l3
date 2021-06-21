@@ -46,12 +46,19 @@ Deno.test("worker > invoke concurrent", async () => {
   host.terminate();
 });
 
-Deno.test("worker > abort", async () => {
+Deno.test("worker > terminate", async () => {
   const host = new PluginHost();
   await host.load("./testdata/test_plugin.ts");
   const invoke = host.invoke("spin", null);
   host.terminate();
-  await assertThrowsAsync(() => invoke);
+  assertEquals(await invoke, {
+    value: undefined,
+    logs: [],
+    error: {
+      name: "TerminateError",
+      message: "Worker was terminated",
+    },
+  });
 });
 
 Deno.test("worker > shutdown", async () => {
@@ -66,4 +73,22 @@ Deno.test("worker > shutdown", async () => {
     value: 50,
     logs: [],
   });
+});
+
+Deno.test("worker > abort", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/test_plugin.ts");
+
+  const ctl = new AbortController();
+  const invoke = host.invoke("spin", null, { signal: ctl.signal });
+  ctl.abort();
+  assertEquals(await invoke, {
+    value: undefined,
+    logs: [],
+    error: {
+      name: "AbortError",
+      message: "Invocation was aborted",
+    },
+  });
+  host.terminate();
 });
