@@ -1,4 +1,4 @@
-import { deferred } from "https://deno.land/std@0.95.0/async/mod.ts";
+import { deferred, delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import * as log from "https://deno.land/std@0.95.0/log/mod.ts";
 
 export function fn(arg: { name: string }): { message: string } {
@@ -21,4 +21,9 @@ export async function concur(val: string | null) {
 
 export function spin() {
   for (let a = 0; a < Number.MAX_SAFE_INTEGER; a++);
+}
+
+export async function wait(n: number) {
+  await delay(n);
+  return n;
 }

@@ -87,7 +87,7 @@ export class Server {
   /** Stops the HTTP server. */
   stop() {
     this.#abort.abort();
-    this.#host.close();
+    this.#host.terminate();
   }
 
   /** Loads the plugin module. */
@@ -161,7 +161,7 @@ export class Server {
       fail("NotFound", new Error(`function "${func}" does not exist`));
       return;
     }
-
+  
     try {
       const result = await this.#host.invoke(func, arg);
       body.result = result.value;

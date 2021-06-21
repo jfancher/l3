@@ -8,7 +8,7 @@ export class PluginHost {
   #worker: Worker;
   #loaded: Deferred<LoadResult>;
   #invoked: Map<string, Deferred<InvokeResult>>;
-  #state: "initial" | "active" | "closed";
+  #state: "initial" | "active" | "closing" | "closed";
 
   constructor() {
     this.#worker = new Worker(new URL("./worker.ts", import.meta.url).href, {
@@ -92,10 +92,18 @@ export class PluginHost {
     return await res;
   }
 
-  /**
-   * Shuts down the plugin.
-   */
-  close() {
+  /** Shuts down the host after any in-flight requests complete. */
+  async shutdown() {
+    if (this.#state === "closed") {
+      throw new Error("invalid host state");
+    }
+    this.#state = "closing";
+    await Promise.allSettled(this.#invoked.values());
+    this.terminate();
+  }
+
+  /** Immediately terminates the plugin and aborts any in-flight requests. */
+  terminate() {
     if (this.#state !== "closed") {
       this.#state = "closed";
       for (const [_, p] of this.#invoked) {

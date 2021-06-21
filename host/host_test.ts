@@ -15,7 +15,7 @@ Deno.test("worker > invoke success", async () => {
       { level: "DEBUG", loggerName: "default", "message": `{"name":"test"}` },
     ],
   });
-  host.close();
+  host.terminate();
 });
 
 Deno.test("worker > invoke async", async () => {
@@ -26,7 +26,7 @@ Deno.test("worker > invoke async", async () => {
     value: "afn: str",
     logs: [],
   });
-  host.close();
+  host.terminate();
 });
 
 Deno.test("worker > invoke concurrent", async () => {
@@ -43,13 +43,27 @@ Deno.test("worker > invoke concurrent", async () => {
     value: "done",
     logs: [],
   });
-  host.close();
+  host.terminate();
 });
 
 Deno.test("worker > abort", async () => {
   const host = new PluginHost();
   await host.load("./testdata/test_plugin.ts");
   const invoke = host.invoke("spin", null);
-  host.close();
+  host.terminate();
   await assertThrowsAsync(() => invoke);
+});
+
+Deno.test("worker > shutdown", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/test_plugin.ts");
+  const invoke = host.invoke("wait", 50);
+  const shutdown = host.shutdown();
+  await assertThrowsAsync(() => host.invoke("wait", 50)); // closed to new requests
+  await shutdown;
+  await assertThrowsAsync(() => host.invoke("wait", 50)); // terminated
+  assertEquals(await invoke, {
+    value: 50,
+    logs: [],
+  });
 });
