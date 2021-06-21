@@ -2,7 +2,7 @@ import { ErrorDetails, InvokeResult, LoadResult } from "./result.ts";
 import { logBuffer } from "./worker_log.ts";
 
 /** A message used to communicate with the worker. */
-export type PluginMessage = LoadMessage | InvokeMessage | CloseMessage;
+export type PluginMessage = LoadMessage | InvokeMessage;
 
 /** The result of of a `PluginMessage` operation. */
 export type PluginResultMessage = LoadResultMessage | InvokeResultMessage;
@@ -60,13 +60,6 @@ export interface InvokeResultMessage extends InvokeResult {
   cid: string;
 }
 
-/**
- * A request to stop the worker.
- */
-export interface CloseMessage {
-  kind: "close";
-}
-
 // The loaded plugin module.
 let plugin: { [func: string]: (arg: unknown) => unknown };
 
@@ -88,12 +81,7 @@ self.onmessage = async (e: MessageEvent<PluginMessage>) => {
       return;
     }
     case "invoke": {
-      const result = await invoke(e.data);
-      self.postMessage(result);
-      return;
-    }
-    case "close": {
-      self.close();
+      invoke(e.data).then((result) => self.postMessage(result));
       return;
     }
   }
