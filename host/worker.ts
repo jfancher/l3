@@ -2,14 +2,14 @@ import { ErrorDetails, InvokeResult, LoadResult } from "./result.ts";
 import { logBuffer } from "./worker_log.ts";
 
 /** A message used to communicate with the worker. */
-export type PluginMessage = LoadMessage | InvokeMessage | CloseMessage;
+export type PluginMessage = LoadMessage | InvokeMessage;
 
 /** The result of of a `PluginMessage` operation. */
 export type PluginResultMessage = LoadResultMessage | InvokeResultMessage;
 
 /**
  * A request to load a plugin module into the worker.
- * 
+ *
  * A plugin must be loaded before any plugin functions are invoked, and a plugin must only be
  * loaded once. The result will be posted as a `LoadResult`.
  */
@@ -31,7 +31,7 @@ export interface LoadResultMessage extends LoadResult {
 
 /**
  * A request to invoke a plugin function.
- * 
+ *
  * A plugin must be loaded before any plugin functions are invoked; otherwise an error will be
  * returned. The result will be posted as an `InvokeResultMessage`.
  */
@@ -60,13 +60,6 @@ export interface InvokeResultMessage extends InvokeResult {
   cid: string;
 }
 
-/**
- * A request to stop the worker.
- */
-export interface CloseMessage {
-  kind: "close";
-}
-
 // The loaded plugin module.
 let plugin: { [func: string]: (arg: unknown) => unknown };
 
@@ -88,12 +81,7 @@ self.onmessage = async (e: MessageEvent<PluginMessage>) => {
       return;
     }
     case "invoke": {
-      const result = await invoke(e.data);
-      self.postMessage(result);
-      return;
-    }
-    case "close": {
-      self.close();
+      invoke(e.data).then((result) => self.postMessage(result));
       return;
     }
   }
@@ -155,7 +143,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
 
 /**
  * Creates a ErrorDetails object.
- * 
+ *
  * @param e The error object or message
  * @param name The error name
  * @returns The error

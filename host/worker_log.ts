@@ -12,7 +12,7 @@ class BufferLogHandler extends BaseHandler {
 
   /**
    * Initializes a new BufferLogHandler.
-   * 
+   *
    * @param level The log level
    */
   constructor(level: LevelName) {

@@ -24,7 +24,7 @@ export interface InvokeResult {
 
 /**
  * A serializable error object.
- * 
+ *
  * @remarks
  * Used as a plain object, not an actual Error. Instances of the Error class lose data when passed
  * through a worker boundary (even though they're said to support structured cloning) and don't
