@@ -120,8 +120,11 @@ export class PluginHost {
 
   /** Shuts down the host after any in-flight requests complete. */
   async shutdown() {
-    if (this.#state === "closed") {
+    if (this.#state === "closing") {
       throw new Error("invalid host state");
+    }
+    if (this.#state === "closed") {
+      return;
     }
     this.#state = "closing";
     await Promise.allSettled(this.#invoked.values());

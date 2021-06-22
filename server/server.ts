@@ -5,7 +5,7 @@ import {
   Router,
   RouterContext,
 } from "https://deno.land/x/oak@v7.5.0/mod.ts";
-import { PluginHost } from "../host/mod.ts";
+import { InvokeResult, LoadResult, PluginHost } from "../host/mod.ts";
 import {
   ErrorDetails,
   INVOKE_STATUS,
@@ -43,6 +43,7 @@ export class Server {
   #status: StatusResponse;
   #abort: AbortController;
   #loaded: Deferred<void>;
+  #nextHost?: PluginHost;
 
   /**
    * Initializes a new plugin server.
@@ -88,11 +89,33 @@ export class Server {
   stop() {
     this.#abort.abort();
     this.#host.terminate();
+    this.#nextHost?.terminate();
   }
 
   /** Loads the plugin module. */
   #load = async () => {
     const result = await this.#host.load(this.#mod);
+    this.#updateLoadStatus(result);
+    this.#loaded.resolve();
+  };
+
+  /** Enqueues a reload of the plugin into a new host, shutting down the current one. */
+  #scheduleReload = () => {
+    if (this.#nextHost) {
+      return;
+    }
+
+    this.#nextHost = new PluginHost();
+    (async () => {
+      const result = await this.#nextHost!.load(this.#mod);
+      this.#updateLoadStatus(result);
+      this.#host = this.#nextHost!;
+      this.#nextHost = undefined;
+    })();
+  };
+
+  /** Updates the host status based when plugin loading completes. */
+  #updateLoadStatus = (result: LoadResult) => {
     if (result.success) {
       this.#status.status = "OK";
       this.#status.functionNames = result.functionNames;
@@ -100,7 +123,6 @@ export class Server {
       this.#status.status = "Failed";
       this.#status.error = result.error;
     }
-    this.#loaded.resolve();
   };
 
   /** GET /status */
@@ -161,9 +183,20 @@ export class Server {
       fail("NotFound", new Error(`function "${func}" does not exist`));
       return;
     }
-  
+
+    // Note: We would like to abort the call when the client disconnects, but we currently don't
+    // have a way to detect this (ref: https://github.com/denoland/deno/issues/10829).
+    //
+    // Instead, for the time being respect the custom X-Timeout header.
+    const timeout = Number.parseInt(ctx.request.headers.get("X-Timeout") ?? "");
+    const ctl = new AbortController();
+    let call = this.#host.invoke(func, arg, { signal: ctl.signal });
+    if (timeout) {
+      call = this.#configureTimeout(call, ctl, timeout);
+    }
+
     try {
-      const result = await this.#host.invoke(func, arg);
+      const result = await call;
       body.result = result.value;
       body.logs = result.logs;
       if (result.error) {
@@ -172,7 +205,29 @@ export class Server {
     } catch (e) {
       const err = (e instanceof Error) ? e : new Error(String(e));
       fail("InternalError", err);
-      return;
+    }
+  };
+
+  /**
+   * Adds a timeout to a request; if the call doesn't complete in a given number of seconds, the
+   * provided abort controller is signalled. The current host will then be terminated and swapped
+   * for a new one.
+   *
+   * @param call The invocation promise
+   * @param ctl The abort controller
+   * @param sec The timeout, in seconds
+   */
+  #configureTimeout = async (
+    call: Promise<InvokeResult>,
+    ctl: AbortController,
+    sec: number,
+  ) => {
+    const timerId = setTimeout(() => ctl.abort(), sec * 1000);
+    ctl.signal.addEventListener("abort", () => this.#scheduleReload());
+    try {
+      return await call;
+    } finally {
+      clearTimeout(timerId);
     }
   };
 }

@@ -10,7 +10,7 @@ import { InvokeResponse } from "./response.ts";
 
 invokeTest(
   "server > invoke success",
-  "simple_plugin.ts",
+  "test_plugin.ts",
   async (host: string) => {
     const response = await fetch(`${host}/invoke/up`, {
       method: "POST",
@@ -18,7 +18,7 @@ invokeTest(
     });
 
     const body: InvokeResponse = await response.json();
-    assertMatch(body.module, /simple_plugin.ts$/);
+    assertMatch(body.module, /test_plugin.ts$/);
     assertEquals(body.functionName, "up");
     assertEquals(body.status, "OK");
     assertEquals(body.result, "STR");
@@ -29,7 +29,7 @@ invokeTest(
 
 invokeTest(
   "server > invoke error",
-  "simple_plugin.ts",
+  "test_plugin.ts",
   async (host: string) => {
     const response = await fetch(`${host}/invoke/up`, {
       method: "POST",
@@ -37,7 +37,7 @@ invokeTest(
     });
 
     const body: InvokeResponse = await response.json();
-    assertMatch(body.module, /simple_plugin.ts$/);
+    assertMatch(body.module, /test_plugin.ts$/);
     assertEquals(body.functionName, "up");
     assertEquals(body.status, "RuntimeError", JSON.stringify(body));
     assertEquals(body.result, undefined);
@@ -47,6 +47,29 @@ invokeTest(
       body.error?.stack ?? "",
       /TypeError: s\.toUpperCase is not a function.*/,
     );
+    assertEquals(response.status, 500);
+  },
+);
+
+invokeTest(
+  "server > invoke timeout",
+  "test_plugin.ts",
+  async (host: string) => {
+    const response = await fetch(`${host}/invoke/wait`, {
+      method: "POST",
+      headers: {
+        "X-Timeout": "1",
+      },
+      body: "10000",
+    });
+
+    const body: InvokeResponse = await response.json();
+    assertMatch(body.module, /test_plugin.ts$/);
+    assertEquals(body.functionName, "wait");
+    assertEquals(body.status, "RuntimeError", JSON.stringify(body));
+    assertEquals(body.result, undefined);
+    assertEquals(body.error?.name, "AbortError");
+    assertEquals(body.error?.message, "Invocation was aborted");
     assertEquals(response.status, 500);
   },
 );
@@ -64,11 +87,11 @@ function invokeTest(
 
     const host = `http://localhost:${port}`;
     try {
-      await Timeout.race([srv.ensureLoaded()], 1000);
-      await Timeout.race([fn(host, srv)], 1000);
+      await Timeout.race([srv.ensureLoaded()], 5000);
+      await Timeout.race([fn(host, srv)], 5000);
     } finally {
       srv.stop();
-      await Timeout.race([stopped], 1000);
+      await Timeout.race([stopped], 5000);
     }
   });
 }
