@@ -9,7 +9,7 @@ export type PluginResultMessage = LoadResultMessage | InvokeResultMessage;
 
 /**
  * A request to load a plugin module into the worker.
- * 
+ *
  * A plugin must be loaded before any plugin functions are invoked, and a plugin must only be
  * loaded once. The result will be posted as a `LoadResult`.
  */
@@ -31,7 +31,7 @@ export interface LoadResultMessage extends LoadResult {
 
 /**
  * A request to invoke a plugin function.
- * 
+ *
  * A plugin must be loaded before any plugin functions are invoked; otherwise an error will be
  * returned. The result will be posted as an `InvokeResultMessage`.
  */
@@ -143,7 +143,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
 
 /**
  * Creates a ErrorDetails object.
- * 
+ *
  * @param e The error object or message
  * @param name The error name
  * @returns The error

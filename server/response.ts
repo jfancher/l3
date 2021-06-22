@@ -9,9 +9,9 @@ export interface StatusResponse {
 
   /**
    * The server status.
-   * 
+   *
    * These statuses are currently defined:
-   * 
+   *
    * | Status  | Code | Description                        |
    * | ------- | ---- | ---------------------------------- |
    * | OK      | 200  | Ready to serve invocation requests |
@@ -44,9 +44,9 @@ export interface InvokeResponse {
 
   /**
    * The invocation status.
-   * 
+   *
    * These statuses are currently defined:
-   * 
+   *
    * | Status          | Code | Description                        |
    * | --------------- | ---- | ---------------------------------- |
    * | OK              | 200  | Successful invocation              |
