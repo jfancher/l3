@@ -58,7 +58,7 @@ invokeTest(
     const response = await fetch(`${host}/invoke/wait`, {
       method: "POST",
       headers: {
-        "X-Timeout": "1",
+        "X-Timeout": "10",
       },
       body: "10000",
     });

@@ -215,14 +215,14 @@ export class Server {
    *
    * @param call The invocation promise
    * @param ctl The abort controller
-   * @param sec The timeout, in seconds
+   * @param msec The timeout, in milliseconds
    */
   #configureTimeout = async (
     call: Promise<InvokeResult>,
     ctl: AbortController,
-    sec: number,
+    msec: number,
   ) => {
-    const timerId = setTimeout(() => ctl.abort(), sec * 1000);
+    const timerId = setTimeout(() => ctl.abort(), msec);
     ctl.signal.addEventListener("abort", () => this.#scheduleReload());
     try {
       return await call;
