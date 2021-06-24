@@ -1,7 +1,11 @@
 import { Deferred, deferred } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { v4 as uuidV4 } from "https://deno.land/std@0.95.0/uuid/mod.ts";
 import { InvokeResult, LoadResult } from "./result.ts";
-import { InvokeMessage, LoadMessage, PluginResultMessage } from "./worker_api.ts";
+import {
+  InvokeMessage,
+  LoadMessage,
+  PluginResultMessage,
+} from "./worker_api.ts";
 
 /** Hosts a plugin instance. */
 export class PluginHost {
