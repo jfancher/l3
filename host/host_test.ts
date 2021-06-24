@@ -29,21 +29,25 @@ Deno.test("worker > invoke async", async () => {
   host.terminate();
 });
 
-Deno.test("worker > invoke concurrent", async () => {
-  const host = new PluginHost();
-  await host.load("./testdata/test_plugin.ts");
+Deno.test({
+  name: "worker > invoke concurrent",
+  ignore: true, // reverted to serial; logging at least needs more work
+  fn: async () => {
+    const host = new PluginHost();
+    await host.load("./testdata/test_plugin.ts");
 
-  const first = host.invoke("concur", null);
-  const second = host.invoke("concur", "done");
-  assertEquals(await first, {
-    value: "done",
-    logs: [],
-  });
-  assertEquals(await second, {
-    value: "done",
-    logs: [],
-  });
-  host.terminate();
+    const first = host.invoke("concur", null);
+    const second = host.invoke("concur", "done");
+    assertEquals(await first, {
+      value: "done",
+      logs: [],
+    });
+    assertEquals(await second, {
+      value: "done",
+      logs: [],
+    });
+    host.terminate();
+  },
 });
 
 Deno.test("worker > terminate", async () => {
