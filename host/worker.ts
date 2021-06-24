@@ -81,7 +81,8 @@ self.onmessage = async (e: MessageEvent<PluginMessage>) => {
       return;
     }
     case "invoke": {
-      invoke(e.data).then((result) => self.postMessage(result));
+      const result = await invoke(e.data);
+      self.postMessage(result);
       return;
     }
   }
