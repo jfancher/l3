@@ -1,3 +1,6 @@
+/// <reference no-default-lib="true" />
+/// <reference lib="deno.worker" />
+
 import { LevelName, setup } from "https://deno.land/std@0.95.0/log/mod.ts";
 import { LogRecord as BaseLogRecord } from "https://deno.land/std@0.95.0/log/logger.ts";
 import {

@@ -1,77 +1,18 @@
-import { ErrorDetails, InvokeResult, LoadResult } from "./result.ts";
+/// <reference no-default-lib="true" />
+/// <reference lib="deno.worker" />
+
+import { ErrorDetails } from "./result.ts";
+import {
+  InvokeMessage,
+  InvokeResultMessage,
+  LoadMessage,
+  LoadResultMessage,
+  PluginMessage,
+} from "./worker_api.ts";
 import { logBuffer } from "./worker_log.ts";
-
-/** A message used to communicate with the worker. */
-export type PluginMessage = LoadMessage | InvokeMessage;
-
-/** The result of of a `PluginMessage` operation. */
-export type PluginResultMessage = LoadResultMessage | InvokeResultMessage;
-
-/**
- * A request to load a plugin module into the worker.
- *
- * A plugin must be loaded before any plugin functions are invoked, and a plugin must only be
- * loaded once. The result will be posted as a `LoadResult`.
- */
-export interface LoadMessage {
-  /** Specifies the kind of the message. */
-  kind: "load";
-
-  /** The path of the module to load. */
-  module: string;
-}
-
-/**
- * The result of loading a plugin.
- */
-export interface LoadResultMessage extends LoadResult {
-  /** Specifies the kind of the message. */
-  kind: "load";
-}
-
-/**
- * A request to invoke a plugin function.
- *
- * A plugin must be loaded before any plugin functions are invoked; otherwise an error will be
- * returned. The result will be posted as an `InvokeResultMessage`.
- */
-export interface InvokeMessage {
-  /** Specifies the kind of the message. */
-  kind: "invoke";
-
-  /** A correlation id, used to identify the corresponding `InvokeResult`. */
-  cid: string;
-
-  /** The path of the module to load. */
-  function: string;
-
-  /** The argument to pass to the function. */
-  argument: unknown;
-}
-
-/**
- * The result of invoking a plugin function.
- */
-export interface InvokeResultMessage extends InvokeResult {
-  /** Specifies the kind of the message. */
-  kind: "invoke";
-
-  /** The correlation id passed in with the `InvokeMessage`. */
-  cid: string;
-}
 
 // The loaded plugin module.
 let plugin: { [func: string]: (arg: unknown) => unknown };
-
-// Tell the IDE that self is a WorkerGlobalScope.
-// This could be done with tsconfig, but this seems to be discouraged; there might be a better way
-// to configure 'lib', but the documentation is incomplete:
-//  https://deno.land/manual@v1.9.2/typescript/configuration#using-the-quotlibquot-property
-declare var self: typeof globalThis & {
-  onmessage?: (ev: MessageEvent) => unknown;
-  postMessage: (message: unknown) => void;
-  close: () => void;
-};
 
 self.onmessage = async (e: MessageEvent<PluginMessage>) => {
   switch (e.data.kind) {
