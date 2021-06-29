@@ -21,7 +21,7 @@ jobs:
       - name: Set up Deno
         uses: denoland/setup-deno@main
         with:
-          deno-version: "1.9.2"
+          deno-version: "1.11.2"
 
       - name: Run tests
         run: deno test --allow-all
@@ -35,11 +35,10 @@ jobs:
       - name: Set up Deno
         uses: denoland/setup-deno@main
         with:
-          deno-version: "1.9.2"
+          deno-version: "1.11.2"
 
       - name: Format
         run: deno fmt --check
   
       - name: Lint
         run: deno lint --unstable
-      
