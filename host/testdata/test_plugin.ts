@@ -27,3 +27,14 @@ export async function wait(n: number) {
   await delay(n);
   return n;
 }
+
+export function doEval(s: string) {
+  return eval(s); // throws as access is restricted
+}
+
+let leakCounter = 0;
+export async function leakAsync() {
+  await delay(2);
+  delay(1).then(() => leakCounter++); // should never finish
+  return leakCounter;
+}

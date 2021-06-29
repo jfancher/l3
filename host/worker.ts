@@ -9,6 +9,7 @@ import {
   LoadResultMessage,
   PluginMessage,
 } from "./worker_api.ts";
+import { InvocationContext } from "./worker_context.ts";
 import { logBuffer } from "./worker_log.ts";
 
 // The loaded plugin module.
@@ -41,7 +42,9 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
     return result;
   }
 
+  const ctx = new InvocationContext("load");
   try {
+    ctx.enter();
     plugin = await import(msg.module);
     result.success = true;
     for (const fn in plugin) {
@@ -51,6 +54,8 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
     }
   } catch (e) {
     result.error = createError(e);
+  } finally {
+    ctx.exit();
   }
   return result;
 }
@@ -74,10 +79,14 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
     return result;
   }
 
+  const ctx = new InvocationContext(msg.cid);
   try {
+    ctx.enter();
     result.value = await Promise.resolve(fn(msg.argument));
   } catch (e) {
     result.error = createError(e);
+  } finally {
+    ctx.exit();
   }
   result.logs = logBuffer.take();
   return result;

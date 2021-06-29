@@ -8,13 +8,11 @@ Deno.test("worker > invoke success", async () => {
   const host = new PluginHost();
   await host.load("./testdata/test_plugin.ts");
   const result = await host.invoke("fn", { name: "test" });
-  assertEquals(result, {
-    value: { message: "name: test" },
-    logs: [
-      { level: "INFO", loggerName: "default", "message": "called fn" },
-      { level: "DEBUG", loggerName: "default", "message": `{"name":"test"}` },
-    ],
-  });
+  assertEquals(result.value, { message: "name: test" });
+  assertEquals(result.logs, [
+    { level: "INFO", loggerName: "default", "message": "called fn" },
+    { level: "DEBUG", loggerName: "default", "message": `{"name":"test"}` },
+  ]);
   host.terminate();
 });
 
@@ -22,10 +20,8 @@ Deno.test("worker > invoke async", async () => {
   const host = new PluginHost();
   await host.load("./testdata/test_plugin.ts");
   const result = await host.invoke("afn", "str");
-  assertEquals(result, {
-    value: "afn: str",
-    logs: [],
-  });
+
+  assertEquals(result.value, "afn: str");
   host.terminate();
 });
 
@@ -38,14 +34,8 @@ Deno.test({
 
     const first = host.invoke("concur", null);
     const second = host.invoke("concur", "done");
-    assertEquals(await first, {
-      value: "done",
-      logs: [],
-    });
-    assertEquals(await second, {
-      value: "done",
-      logs: [],
-    });
+    assertEquals((await first).value, "done");
+    assertEquals((await second).value, "done");
     host.terminate();
   },
 });
@@ -55,13 +45,11 @@ Deno.test("worker > terminate", async () => {
   await host.load("./testdata/test_plugin.ts");
   const invoke = host.invoke("spin", null);
   host.terminate();
-  assertEquals(await invoke, {
-    value: undefined,
-    logs: [],
-    error: {
-      name: "TerminateError",
-      message: "Worker was terminated",
-    },
+  const result = await invoke;
+  assertEquals(result.value, undefined);
+  assertEquals(result.error, {
+    name: "TerminateError",
+    message: "Worker was terminated",
   });
 });
 
@@ -73,10 +61,8 @@ Deno.test("worker > shutdown", async () => {
   await assertThrowsAsync(() => host.invoke("wait", 50)); // closed to new requests
   await shutdown;
   await assertThrowsAsync(() => host.invoke("wait", 50)); // terminated
-  assertEquals(await invoke, {
-    value: 50,
-    logs: [],
-  });
+  const result = await invoke;
+  assertEquals(result.value, 50);
 });
 
 Deno.test("worker > abort", async () => {
@@ -86,13 +72,34 @@ Deno.test("worker > abort", async () => {
   const ctl = new AbortController();
   const invoke = host.invoke("spin", null, { signal: ctl.signal });
   ctl.abort();
-  assertEquals(await invoke, {
-    value: undefined,
-    logs: [],
-    error: {
-      name: "AbortError",
-      message: "Invocation was aborted",
-    },
+
+  const result = await invoke;
+  assertEquals(result.value, undefined);
+  assertEquals(result.error, {
+    name: "AbortError",
+    message: "Invocation was aborted",
   });
+  host.terminate();
+});
+
+Deno.test("worker > restricted", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/test_plugin.ts");
+
+  const result = await host.invoke("doEval", "1");
+  assertEquals(result.value, undefined);
+  assertEquals(result.error?.message, "eval is not supported");
+  host.terminate();
+});
+
+Deno.test("worker > wrap schedule", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/test_plugin.ts");
+
+  const result1 = await host.invoke("leakAsync", "{}");
+  assertEquals(result1.value, 0);
+
+  const result2 = await host.invoke("leakAsync", "{}");
+  assertEquals(result2.value, 0);
   host.terminate();
 });
