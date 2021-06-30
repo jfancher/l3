@@ -12,11 +12,11 @@ export interface StatusResponse {
    *
    * These statuses are currently defined:
    *
-   * | Status  | Code | Description                        |
-   * | ------- | ---- | ---------------------------------- |
-   * | OK      | 200  | Ready to serve invocation requests |
-   * | Loading | 503  | Module is being loaded             |
-   * | Failed  | 500  | Loading encountered a fatal error  |
+   * | Status      | Code | Description                          |
+   * | ----------- | ---- | ------------------------------------ |
+   * | OK          | 200  | Ready to serve invocation requests   |
+   * | Loading     | 503  | Module is being loaded               |
+   * | LoadFailed  | 500  | Loading failed with a runtime error  |
    */
   status: keyof typeof SERVER_STATUS;
 
@@ -24,14 +24,23 @@ export interface StatusResponse {
   error?: ErrorDetails;
 
   /** The available function names, if loading succeeded. */
-  functionNames: string[];
+  functionNames?: string[];
+
+  /** The current memory usage of the process. */
+  // TODO: Replace with Deno.MemoryUsage in 1.12+.
+  memoryUsage?: {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+  };
 }
 
 /** Maps server status strings to HTTP status codes. */
 export const SERVER_STATUS = {
   "OK": 200,
   "Loading": 503,
-  "Failed": 500,
+  "LoadFailed": 500,
 } as const;
 
 /** Response to an /invoke/:func request. */

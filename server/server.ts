@@ -56,7 +56,7 @@ export class Server {
     this.#port = port;
     this.#host = new PluginHost();
     this.#running = false;
-    this.#status = { module: mod, status: "Loading", functionNames: [] };
+    this.#status = { module: mod, status: "Loading" };
     this.#abort = new AbortController();
     this.#loaded = deferred<void>();
   }
@@ -120,7 +120,7 @@ export class Server {
       this.#status.status = "OK";
       this.#status.functionNames = result.functionNames;
     } else {
-      this.#status.status = "Failed";
+      this.#status.status = "LoadFailed";
       this.#status.error = result.error;
     }
   };
@@ -128,7 +128,13 @@ export class Server {
   /** GET /status */
   #handleStatus = (ctx: Ctx) => {
     ctx.response.status = SERVER_STATUS[this.#status.status];
-    ctx.response.body = this.#status;
+    ctx.response.body = {
+      ...this.#status,
+      // TODO: This is currently erroneously defined as an unstable API.
+      //   It should work resolve correctly in Deno 1.12+.
+      // deno-lint-ignore no-explicit-any
+      memoryUsage: (Deno as any).memoryUsage(),
+    };
   };
 
   /** POST /invoke/:func */
@@ -164,7 +170,7 @@ export class Server {
       case "Loading":
         fail("Unavailable", new Error("module is loading"));
         return;
-      case "Failed":
+      case "LoadFailed":
         fail("Unavailable", this.#status.error!);
         return;
     }
@@ -179,7 +185,7 @@ export class Server {
       return;
     }
 
-    if (!this.#status.functionNames.includes(func)) {
+    if (!this.#status.functionNames?.includes(func)) {
       fail("NotFound", new Error(`function "${func}" does not exist`));
       return;
     }
