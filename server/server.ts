@@ -131,7 +131,7 @@ export class Server {
     ctx.response.body = {
       ...this.#status,
       // TODO: This is currently erroneously defined as an unstable API.
-      //   It should work resolve correctly in Deno 1.12+.
+      //   It should resolve correctly in Deno 1.12+.
       // deno-lint-ignore no-explicit-any
       memoryUsage: (Deno as any).memoryUsage(),
     };
