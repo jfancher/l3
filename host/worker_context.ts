@@ -6,7 +6,6 @@ const cid = Symbol("cid");
 
 // Overrides a global property.
 type Override<K, T> = (
-  cid: string,
   key: K,
   value: T,
   prop: PropertyDescriptor,
@@ -17,6 +16,7 @@ export class InvocationContext {
   #cid: string;
   #orig: Record<PropertyKey, PropertyDescriptor>;
   #timers: Set<number>;
+  #abort: AbortController;
 
   /**
    * Initializes a new invocation context.
@@ -27,6 +27,7 @@ export class InvocationContext {
     this.#cid = cid;
     this.#orig = {};
     this.#timers = new Set();
+    this.#abort = new AbortController();
   }
 
   /** Sets the global environment to the isolated invocation context. */
@@ -45,7 +46,7 @@ export class InvocationContext {
       this.#orig[key] = prop;
       if (key in overrides) {
         const override = overrides[key] as Override<unknown, unknown>;
-        const replacement = override(this.#cid, key, env[key], prop);
+        const replacement = override(key, env[key], prop);
         Object.defineProperty(globalThis, key, replacement);
       }
     }
@@ -72,6 +73,39 @@ export class InvocationContext {
       clearInterval(timerId);
     }
     this.#timers.clear();
+
+    this.#abort.abort();
+    this.#abort = new AbortController();
+  }
+
+  /** Binds a call to fetch to the active invocation. */
+  #fetch(fn: typeof fetch, ...[input, init]: Parameters<typeof fetch>) {
+    // Connect to the invoke abort signal, keeping any existing one.
+    const invokeSignal = this.#abort.signal;
+    let finalSignal = this.#abort.signal;
+    if (init?.signal !== undefined) {
+      if (init.signal !== null) { // null means none, distinct from undefined
+        finalSignal = joinSignals(init.signal, invokeSignal);
+      }
+    } else if (input instanceof Request) {
+      if (input.signal) {
+        finalSignal = joinSignals(input.signal, invokeSignal);
+      }
+    }
+
+    // Turn an abort from invokeSignal into a 408 (Request Timeout) response.
+    // This is mostly so that Deno doesn't crash on the unobserved rejection,
+    // which is likely what will happen if a fetch ends up leaking.
+    const p = fn(input, { ...init, signal: finalSignal });
+    return p.catch((e) => {
+      if (e?.name === "AbortError" && invokeSignal.aborted) {
+        return new Response(null, {
+          status: 408,
+          statusText: "Request aborted.",
+        });
+      }
+      throw e;
+    });
   }
 
   /** Specifies how to handle each defined global. */
@@ -86,7 +120,7 @@ export class InvocationContext {
     WebAssembly: forbid,
     eval: forbid,
     queueMicrotask: forbid,
-    fetch: forbid,
+    fetch: wrap((...args) => this.#fetch(...args)),
     setTimeout: replace((fn) =>
       (cb, delay, ...args) => {
         const timerId = fn(cb, delay, ...args);
@@ -216,12 +250,12 @@ export class InvocationContext {
 }
 
 // Allows a property through unchanged.
-function allow<K, T>(_cid: string, _key: K, _val: T, prop: PropertyDescriptor) {
+function allow<K, T>(_key: K, _val: T, prop: PropertyDescriptor) {
   return prop;
 }
 
 // Throws an error when a property is accessed (or called, if a function).
-function forbid<K, T>(_: string, key: K, val: T) {
+function forbid<K, T>(key: K, val: T) {
   const fail = () => {
     throw new Error(`${key} is not supported`);
   };
@@ -232,9 +266,38 @@ function forbid<K, T>(_: string, key: K, val: T) {
 }
 
 // Replaces the value of a property.
-function replace<K, T>(fn: (val: T, cid: string) => T): Override<K, T> {
-  return (cid, _key, val) => {
-    const newVal = fn(val, cid);
+function replace<K, T>(fn: (val: T) => T): Override<K, T> {
+  return (_key, val) => {
+    const newVal = fn(val);
     return { get: () => newVal };
   };
+}
+
+// Wraps calls to a function.
+// deno-lint-ignore no-explicit-any
+function wrap<K, T extends (...args: any[]) => any>(
+  fn: (fn: T, ...val: Parameters<T>) => ReturnType<T>,
+): Override<K, T> {
+  return (_key, val) => {
+    const newVal = (...args: Parameters<T>) => fn(val, ...args);
+    return { get: () => newVal };
+  };
+}
+
+// Creates an AbortSignal that fires when any of a set of input signals fires.
+function joinSignals(...signals: AbortSignal[]) {
+  if (signals.length === 0) {
+    return new AbortSignal();
+  }
+  if (signals.length === 1) {
+    return signals[0];
+  }
+  const ctl = new AbortController();
+  for (const signal of signals) {
+    signal.addEventListener("abort", () => ctl.abort());
+    if (signal.aborted) {
+      ctl.abort();
+    }
+  }
+  return ctl.signal;
 }

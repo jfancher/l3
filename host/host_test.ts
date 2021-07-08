@@ -2,6 +2,7 @@ import {
   assertEquals,
   assertThrowsAsync,
 } from "https://deno.land/std@0.95.0/testing/asserts.ts";
+import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
 
 Deno.test("worker > invoke success", async () => {
@@ -101,5 +102,45 @@ Deno.test("worker > wrap schedule", async () => {
 
   const result2 = await host.invoke("leakAsync", "{}");
   assertEquals(result2.value, 0);
+  host.terminate();
+});
+
+Deno.test("worker > wrap fetch", async () => {
+  const host = new PluginHost();
+  await host.load("./testdata/test_plugin.ts");
+
+  const srv = serve({ port: 0 });
+  const port = (srv.listener.addr as Deno.NetAddr).port;
+  (async () => {
+    for await (const req of srv) {
+      req.respond({ body: `"${req.method} ${req.url}"` });
+    }
+  })();
+
+  const url = `http://localhost:${port}/test`;
+
+  // normal fetch
+  const result1 = await host.invoke("doFetch", url);
+  assertEquals(result1.value, [
+    "GET /test?string",
+    "GET /test?url",
+    "CUSTOM /test",
+  ]);
+
+  // fetch with explicit abort
+  const result2 = await host.invoke("fetchAbort", { url, abort: true });
+  assertEquals(result2.value, undefined);
+  assertEquals(result2.error?.message, "Ongoing fetch was aborted.");
+
+  const result3 = await host.invoke("fetchAbort", { url, abort: false });
+  assertEquals(result3.value, "GET /test");
+
+  // leak a fetch, ensure it's aborted
+  const result4 = await host.invoke("doFetchLeak", url);
+  assertEquals(result4.value, "No value.");
+  const result5 = await host.invoke("doFetchLeak", undefined);
+  assertEquals(result5.value, "Request aborted.");
+
+  srv.close();
   host.terminate();
 });

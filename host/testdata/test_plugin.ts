@@ -38,3 +38,46 @@ export async function leakAsync() {
   delay(1).then(() => leakCounter++); // should never finish
   return leakCounter;
 }
+
+export async function doFetch(url: string) {
+  // fetch(string)
+  const strResponse = await fetch(`${url}?string`);
+  let strResult = strResponse.statusText;
+  if (strResponse.ok) {
+    strResult = await strResponse.json();
+  }
+
+  // fetch(URL)
+  const urlResponse = await fetch(new URL(`${url}?url`));
+  let urlResult = urlResponse.statusText;
+  if (urlResponse.ok) {
+    urlResult = await urlResponse.json();
+  }
+
+  // fetch(Request)
+  const reqResponse = await fetch(new Request(url, { method: "CUSTOM" }));
+  let reqResult = reqResponse.statusText;
+  if (reqResponse.ok) {
+    reqResult = await reqResponse.json();
+  }
+
+  return [strResult, urlResult, reqResult];
+}
+
+export async function fetchAbort(arg: { url: string; abort: boolean }) {
+  const ctl = new AbortController();
+  if (arg.abort) {
+    ctl.abort();
+  }
+  const res = await fetch(new Request(arg.url, { signal: ctl.signal }));
+  return await res.json();
+}
+
+let leakResult = "No value.";
+export function doFetchLeak(url?: string) {
+  if (url) {
+    // not awaited, should be aborted upon return
+    fetch(url).then((r) => leakResult = r.statusText);
+  }
+  return leakResult;
+}
