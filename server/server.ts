@@ -71,8 +71,8 @@ export class Server {
     this.#load();
 
     const router = new Router();
-    router.get("/status", this.#handleStatus);
-    router.post("/invoke/:func", this.#handleInvoke);
+    router.get("/status", (ctx) => this.#handleStatus(ctx));
+    router.post("/invoke/:func", (ctx) => this.#handleInvoke(ctx));
 
     const app = new Application();
     app.use(router.routes());
