@@ -93,14 +93,14 @@ export class Server {
   }
 
   /** Loads the plugin module. */
-  #load = async () => {
+  async #load() {
     const result = await this.#host.load(this.#mod);
     this.#updateLoadStatus(result);
     this.#loaded.resolve();
-  };
+  }
 
   /** Enqueues a reload of the plugin into a new host, shutting down the current one. */
-  #scheduleReload = () => {
+  #scheduleReload() {
     if (this.#nextHost) {
       return;
     }
@@ -112,10 +112,10 @@ export class Server {
       this.#host = this.#nextHost!;
       this.#nextHost = undefined;
     })();
-  };
+  }
 
   /** Updates the host status based when plugin loading completes. */
-  #updateLoadStatus = (result: LoadResult) => {
+  #updateLoadStatus(result: LoadResult) {
     if (result.success) {
       this.#status.status = "OK";
       this.#status.functionNames = result.functionNames;
@@ -123,10 +123,10 @@ export class Server {
       this.#status.status = "LoadFailed";
       this.#status.error = result.error;
     }
-  };
+  }
 
   /** GET /status */
-  #handleStatus = (ctx: Ctx) => {
+  #handleStatus(ctx: Ctx) {
     ctx.response.status = SERVER_STATUS[this.#status.status];
     ctx.response.body = {
       ...this.#status,
@@ -135,10 +135,10 @@ export class Server {
       // deno-lint-ignore no-explicit-any
       memoryUsage: (Deno as any).memoryUsage(),
     };
-  };
+  }
 
   /** POST /invoke/:func */
-  #handleInvoke = async (ctx: Ctx) => {
+  async #handleInvoke(ctx: Ctx) {
     const func = ctx.params.func;
     const body: InvokeResponse = {
       module: this.#mod,
@@ -212,7 +212,7 @@ export class Server {
       const err = (e instanceof Error) ? e : new Error(String(e));
       fail("InternalError", err);
     }
-  };
+  }
 
   /**
    * Adds a timeout to a request; if the call doesn't complete in a given number of seconds, the
@@ -223,11 +223,11 @@ export class Server {
    * @param ctl The abort controller
    * @param msec The timeout, in milliseconds
    */
-  #configureTimeout = async (
+  async #configureTimeout(
     call: Promise<InvokeResult>,
     ctl: AbortController,
     msec: number,
-  ) => {
+  ) {
     const timerId = setTimeout(() => ctl.abort(), msec);
     ctl.signal.addEventListener("abort", () => this.#scheduleReload());
     try {
@@ -235,5 +235,5 @@ export class Server {
     } finally {
       clearTimeout(timerId);
     }
-  };
+  }
 }

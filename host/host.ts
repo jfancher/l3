@@ -107,7 +107,7 @@ export class PluginHost {
   }
 
   /** Resolves an invocation promise and removes it from the in-progress map. */
-  #completeInvoke = (cid: string, result: Partial<InvokeResult>) => {
+  #completeInvoke(cid: string, result: Partial<InvokeResult>) {
     const p = this.#invoked.get(cid);
     if (p) {
       const r: InvokeResult = {

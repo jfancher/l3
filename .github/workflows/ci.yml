@@ -41,4 +41,4 @@ jobs:
         run: deno fmt --check
   
       - name: Lint
-        run: deno lint --unstable
+        run: deno lint
