@@ -120,7 +120,7 @@ export class PluginHost {
       p.resolve(r);
       this.#invoked.delete(cid);
     }
-  };
+  }
 
   /** Shuts down the host after any in-flight requests complete. */
   async shutdown() {
