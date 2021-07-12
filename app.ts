@@ -10,6 +10,9 @@ if (args._.length !== 1) {
   Deno.exit(1);
 }
 
-const mod = `file://${Deno.cwd()}/${args._[0]}`;
-const server = new Server(mod, args.port);
+const plugin = {
+  module: `file://${Deno.cwd()}/${args._[0]}`,
+};
+
+const server = new Server(plugin, args.port);
 await server.run();

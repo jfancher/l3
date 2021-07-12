@@ -1,6 +1,7 @@
 /// <reference no-default-lib="true" />
 /// <reference lib="deno.worker" />
 
+import { Plugin } from "./plugin.ts";
 import { ErrorDetails } from "./result.ts";
 import {
   InvokeMessage,
@@ -13,7 +14,8 @@ import { InvocationContext } from "./worker_context.ts";
 import { logBuffer } from "./worker_log.ts";
 
 // The loaded plugin module.
-let plugin: { [func: string]: (arg: unknown) => unknown };
+let plugin: Plugin;
+let module: { [func: string]: (arg: unknown) => unknown };
 
 self.onmessage = async (e: MessageEvent<PluginMessage>) => {
   switch (e.data.kind) {
@@ -45,10 +47,11 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
   const ctx = new InvocationContext("load");
   try {
     ctx.enter();
-    plugin = await import(msg.module);
+    plugin = msg.plugin;
+    module = await import(plugin.module);
     result.success = true;
-    for (const fn in plugin) {
-      if (plugin[fn] instanceof Function) {
+    for (const fn in module) {
+      if (module[fn] instanceof Function) {
         result.functionNames.push(fn);
       }
     }
@@ -73,7 +76,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
     return result;
   }
 
-  const fn = plugin[msg.function];
+  const fn = module[msg.function];
   if (!(fn instanceof Function)) {
     result.error = createError(`missing or invalid function "${msg.function}"`);
     return result;

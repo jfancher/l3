@@ -82,7 +82,8 @@ function invokeTest(
   Deno.test(name, async () => {
     const dir = path.dirname(new URL(import.meta.url).pathname);
     const port = await getAvailablePort();
-    const srv = new Server(`file://${path.join(dir, "testdata", mod)}`, port);
+    const plugin = { module: `file://${path.join(dir, "testdata", mod)}` };
+    const srv = new Server(plugin, port);
     const stopped = srv.run();
 
     const host = `http://localhost:${port}`;
