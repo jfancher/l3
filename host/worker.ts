@@ -44,11 +44,11 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
     return result;
   }
 
-  const ctx = new InvocationContext("load");
+  const ctx = new InvocationContext("load", msg.plugin.globals);
   try {
     ctx.enter();
+    module = await import(msg.plugin.module);
     plugin = msg.plugin;
-    module = await import(plugin.module);
     result.success = true;
     for (const fn in module) {
       if (module[fn] instanceof Function) {
@@ -82,7 +82,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
     return result;
   }
 
-  const ctx = new InvocationContext(msg.cid);
+  const ctx = new InvocationContext(msg.cid, plugin.globals);
   try {
     ctx.enter();
     result.value = await Promise.resolve(fn(msg.argument));

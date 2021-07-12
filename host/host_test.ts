@@ -144,3 +144,17 @@ Deno.test("worker > wrap fetch", async () => {
   srv.close();
   host.terminate();
 });
+
+Deno.test("worker > global", async () => {
+  const host = new PluginHost();
+  
+  await host.load({
+    module: "./testdata/test_plugin.ts",
+    globals: { "MY_KEY": 12345 },
+  });
+
+  const result = await host.invoke("useGlobal", "test");
+  assertEquals(result.value, "test: 12345");
+
+  host.terminate();
+});
