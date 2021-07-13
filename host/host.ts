@@ -1,5 +1,6 @@
 import { Deferred, deferred } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { v4 as uuidV4 } from "https://deno.land/std@0.95.0/uuid/mod.ts";
+import { Plugin } from "./plugin.ts";
 import { InvokeResult, LoadResult } from "./result.ts";
 import {
   InvokeMessage,
@@ -54,15 +55,15 @@ export class PluginHost {
   /**
    * Loads the plugin module.
    *
-   * @param module The module path
+   * @param plugin The plugin definition
    * @returns The load result
    */
-  async load(module: string): Promise<LoadResult> {
+  async load(plugin: Plugin): Promise<LoadResult> {
     if (this.#state !== "initial") {
       throw new Error("invalid host state");
     }
     this.#state = "active";
-    const msg: LoadMessage = { kind: "load", module: module };
+    const msg: LoadMessage = { kind: "load", plugin };
     this.#worker.postMessage(msg);
     return await this.#loaded;
   }

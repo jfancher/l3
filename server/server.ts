@@ -5,7 +5,7 @@ import {
   Router,
   RouterContext,
 } from "https://deno.land/x/oak@v7.5.0/mod.ts";
-import { InvokeResult, LoadResult, PluginHost } from "../host/mod.ts";
+import { InvokeResult, LoadResult, Plugin, PluginHost } from "../host/mod.ts";
 import {
   ErrorDetails,
   INVOKE_STATUS,
@@ -36,7 +36,7 @@ type Ctx = RouterContext<RouteParams, Record<string, unknown>>;
  * Returns an {@link InvokeResponse}.
  */
 export class Server {
-  #mod: string;
+  #plugin: Plugin;
   #port: number;
   #host: PluginHost;
   #running: boolean;
@@ -48,15 +48,15 @@ export class Server {
   /**
    * Initializes a new plugin server.
    *
-   * @param mod The plugin module path
+   * @param plugin The plugin definition
    * @param port The server port
    */
-  constructor(mod: string, port: number = 8080) {
-    this.#mod = mod;
+  constructor(plugin: Plugin, port: number = 8080) {
+    this.#plugin = plugin;
     this.#port = port;
     this.#host = new PluginHost();
     this.#running = false;
-    this.#status = { module: mod, status: "Loading" };
+    this.#status = { module: plugin.module, status: "Loading" };
     this.#abort = new AbortController();
     this.#loaded = deferred<void>();
   }
@@ -94,7 +94,7 @@ export class Server {
 
   /** Loads the plugin module. */
   async #load() {
-    const result = await this.#host.load(this.#mod);
+    const result = await this.#host.load(this.#plugin);
     this.#updateLoadStatus(result);
     this.#loaded.resolve();
   }
@@ -107,7 +107,7 @@ export class Server {
 
     this.#nextHost = new PluginHost();
     (async () => {
-      const result = await this.#nextHost!.load(this.#mod);
+      const result = await this.#nextHost!.load(this.#plugin);
       this.#updateLoadStatus(result);
       this.#host = this.#nextHost!;
       this.#nextHost = undefined;
@@ -141,7 +141,7 @@ export class Server {
   async #handleInvoke(ctx: Ctx) {
     const func = ctx.params.func;
     const body: InvokeResponse = {
-      module: this.#mod,
+      module: this.#plugin.module,
       functionName: func ?? "",
       status: "OK",
       result: undefined,

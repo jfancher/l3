@@ -14,6 +14,7 @@ type Override<K, T> = (
 /** Creates a restricted execution environment for a plugin invocation. */
 export class InvocationContext {
   #cid: string;
+  #customGlobals: Record<string, unknown>;
   #orig: Record<PropertyKey, PropertyDescriptor>;
   #timers: Set<number>;
   #abort: AbortController;
@@ -22,9 +23,11 @@ export class InvocationContext {
    * Initializes a new invocation context.
    *
    * @param cid The call id
+   * @param globals Additional values to add to the global environment
    */
-  constructor(cid: string) {
+  constructor(cid: string, globals?: Record<string, unknown>) {
     this.#cid = cid;
+    this.#customGlobals = globals ?? {};
     this.#orig = {};
     this.#timers = new Set();
     this.#abort = new AbortController();
@@ -35,7 +38,7 @@ export class InvocationContext {
     const env = Object(globalThis);
     if (env[cid]) {
       throw new Error(
-        `cannot reenter context '${this.#cid}' (current: ${env[cid]})`,
+        `Cannot reenter context '${this.#cid}' (current: ${env[cid]}).`,
       );
     }
 
@@ -52,6 +55,12 @@ export class InvocationContext {
     }
 
     env[cid] = this.#cid;
+    for (const key in this.#customGlobals) {
+      if (key in globalProps) {
+        throw new Error(`Cannot redefine ${key}.`);
+      }
+      env[key] = this.#customGlobals[key];
+    }
   }
 
   /** Restores the global environment. */
@@ -59,8 +68,12 @@ export class InvocationContext {
     const env = Object(globalThis);
     if (env[cid] !== this.#cid) {
       throw new Error(
-        `context '${this.#cid}' not active (current: '${env[cid]}')`,
+        `Context '${this.#cid}' not active (current: '${env[cid]}').`,
       );
+    }
+
+    for (const key in this.#customGlobals) {
+      delete env[key];
     }
     delete env[cid];
 

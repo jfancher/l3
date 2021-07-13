@@ -81,3 +81,8 @@ export function doFetchLeak(url?: string) {
   }
   return leakResult;
 }
+
+declare const MY_KEY: number;
+export function useGlobal(arg: string) {
+  return `${arg}: ${MY_KEY}`;
+}

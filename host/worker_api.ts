@@ -1,3 +1,4 @@
+import { Plugin } from "./plugin.ts";
 import { InvokeResult, LoadResult } from "./result.ts";
 
 /** A message used to communicate with the worker. */
@@ -16,8 +17,8 @@ export interface LoadMessage {
   /** Specifies the kind of the message. */
   kind: "load";
 
-  /** The path of the module to load. */
-  module: string;
+  /** The plugin definition.. */
+  plugin: Plugin;
 }
 
 /**
