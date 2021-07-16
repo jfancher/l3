@@ -259,6 +259,8 @@ export class InvocationContext {
     TransformStream: allow,
     BroadcastChannel: allow,
     SubtleCrypto: allow,
+    CryptoKey: allow,
+    CryptoKeyPair: allow,
   };
 }
 
