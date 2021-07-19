@@ -130,10 +130,7 @@ export class Server {
     ctx.response.status = SERVER_STATUS[this.#status.status];
     ctx.response.body = {
       ...this.#status,
-      // TODO: This is currently erroneously defined as an unstable API.
-      //   It should resolve correctly in Deno 1.12+.
-      // deno-lint-ignore no-explicit-any
-      memoryUsage: (Deno as any).memoryUsage(),
+      memoryUsage: Deno.memoryUsage(),
     };
   }
 
