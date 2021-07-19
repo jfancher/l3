@@ -16,7 +16,7 @@ export class PluginHost {
   #state: "initial" | "active" | "closing" | "closed";
 
   constructor() {
-    this.#worker = new Worker(new URL("./worker.ts", import.meta.url).href, {
+    this.#worker = new Worker(new URL("./worker.ts", import.meta.url), {
       "type": "module",
     });
 
