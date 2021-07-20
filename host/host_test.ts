@@ -26,21 +26,6 @@ Deno.test("worker > invoke async", async () => {
   host.terminate();
 });
 
-Deno.test({
-  name: "worker > invoke concurrent",
-  ignore: true, // reverted to serial; logging at least needs more work
-  fn: async () => {
-    const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-    await host.load();
-
-    const first = host.invoke("concur", null);
-    const second = host.invoke("concur", "done");
-    assertEquals((await first).value, "done");
-    assertEquals((await second).value, "done");
-    host.terminate();
-  },
-});
-
 Deno.test("worker > terminate", async () => {
   const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
   await host.load();
@@ -157,4 +142,49 @@ Deno.test("worker > global", async () => {
   assertEquals(result.value, "test: 12345");
 
   host.terminate();
+});
+
+Deno.test({
+  name: "worker > concurrent",
+  ignore: true, // TODO: WIP
+  fn: async () => {
+    const host = new PluginHost({
+      module: "./testdata/test_plugin.ts",
+      concurrency: 2,
+    });
+    await host.load();
+
+    // double-check that the two are loaded in different workers
+    const first = host.invoke("concur", null);
+    const second = host.invoke("concur", null);
+    assertEquals((await first).value, 1);
+    assertEquals((await second).value, 1);
+    host.terminate();
+  },
+});
+
+Deno.test({
+  name: "worker > reload",
+  ignore: true, // TODO: WIP
+  fn: async () => {
+    const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+    await host.load();
+
+    const ctl = new AbortController();
+    const first = host.invoke("spin", null, { signal: ctl.signal });
+    const second = host.invoke("afn", "x");
+
+    // first should be aborted, but second should still complete
+    ctl.abort();
+    const result1 = await first;
+    assertEquals(result1.value, undefined);
+    assertEquals(result1.error, {
+      name: "AbortError",
+      message: "Invocation was aborted",
+    });
+    const result2 = await second;
+    assertEquals(result2.value, "afn: x");
+
+    host.terminate();
+  },
 });
