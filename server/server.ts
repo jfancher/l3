@@ -54,7 +54,7 @@ export class Server {
   constructor(plugin: Plugin, port: number = 8080) {
     this.#plugin = plugin;
     this.#port = port;
-    this.#host = new PluginHost();
+    this.#host = new PluginHost(plugin);
     this.#running = false;
     this.#status = { module: plugin.module, status: "Loading" };
     this.#abort = new AbortController();
@@ -94,7 +94,7 @@ export class Server {
 
   /** Loads the plugin module. */
   async #load() {
-    const result = await this.#host.load(this.#plugin);
+    const result = await this.#host.load();
     this.#updateLoadStatus(result);
     this.#loaded.resolve();
   }
@@ -105,9 +105,9 @@ export class Server {
       return;
     }
 
-    this.#nextHost = new PluginHost();
+    this.#nextHost = new PluginHost(this.#plugin);
     (async () => {
-      const result = await this.#nextHost!.load(this.#plugin);
+      const result = await this.#nextHost!.load();
       this.#updateLoadStatus(result);
       this.#host = this.#nextHost!;
       this.#nextHost = undefined;

@@ -6,8 +6,8 @@ import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
 
 Deno.test("worker > invoke success", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
   const result = await host.invoke("fn", { name: "test" });
   assertEquals(result.value, { message: "name: test" });
   assertEquals(result.logs, [
@@ -18,8 +18,8 @@ Deno.test("worker > invoke success", async () => {
 });
 
 Deno.test("worker > invoke async", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
   const result = await host.invoke("afn", "str");
 
   assertEquals(result.value, "afn: str");
@@ -30,8 +30,8 @@ Deno.test({
   name: "worker > invoke concurrent",
   ignore: true, // reverted to serial; logging at least needs more work
   fn: async () => {
-    const host = new PluginHost();
-    await host.load({ module: "./testdata/test_plugin.ts" });
+    const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+    await host.load();
 
     const first = host.invoke("concur", null);
     const second = host.invoke("concur", "done");
@@ -42,8 +42,8 @@ Deno.test({
 });
 
 Deno.test("worker > terminate", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
   const invoke = host.invoke("spin", null);
   host.terminate();
   const result = await invoke;
@@ -55,8 +55,8 @@ Deno.test("worker > terminate", async () => {
 });
 
 Deno.test("worker > shutdown", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
   const invoke = host.invoke("wait", 50);
   const shutdown = host.shutdown();
   await assertThrowsAsync(() => host.invoke("wait", 50)); // closed to new requests
@@ -67,8 +67,8 @@ Deno.test("worker > shutdown", async () => {
 });
 
 Deno.test("worker > abort", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
 
   const ctl = new AbortController();
   const invoke = host.invoke("spin", null, { signal: ctl.signal });
@@ -84,8 +84,8 @@ Deno.test("worker > abort", async () => {
 });
 
 Deno.test("worker > restricted", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
 
   const result = await host.invoke("doEval", "1");
   assertEquals(result.value, undefined);
@@ -94,8 +94,8 @@ Deno.test("worker > restricted", async () => {
 });
 
 Deno.test("worker > wrap schedule", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
 
   const result1 = await host.invoke("leakAsync", "{}");
   assertEquals(result1.value, 0);
@@ -106,8 +106,8 @@ Deno.test("worker > wrap schedule", async () => {
 });
 
 Deno.test("worker > wrap fetch", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.load();
 
   const srv = serve({ port: 0 });
   const port = (srv.listener.addr as Deno.NetAddr).port;
@@ -146,12 +146,12 @@ Deno.test("worker > wrap fetch", async () => {
 });
 
 Deno.test("worker > global", async () => {
-  const host = new PluginHost();
-
-  await host.load({
+  const host = new PluginHost({
     module: "./testdata/test_plugin.ts",
     globals: { "MY_KEY": 12345 },
   });
+
+  await host.load();
 
   const result = await host.invoke("useGlobal", "test");
   assertEquals(result.value, "test: 12345");

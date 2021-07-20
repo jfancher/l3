@@ -10,12 +10,14 @@ import {
 
 /** Hosts a plugin instance. */
 export class PluginHost {
+  #plugin: Plugin;
   #worker: Worker;
   #loaded: Deferred<LoadResult>;
   #invoked: Map<string, Deferred<InvokeResult>>;
   #state: "initial" | "active" | "closing" | "closed";
 
-  constructor() {
+  constructor(plugin: Plugin) {
+    this.#plugin = plugin;
     this.#worker = new Worker(new URL("./worker.ts", import.meta.url), {
       "type": "module",
     });
@@ -55,15 +57,14 @@ export class PluginHost {
   /**
    * Loads the plugin module.
    *
-   * @param plugin The plugin definition
    * @returns The load result
    */
-  async load(plugin: Plugin): Promise<LoadResult> {
+  async load(): Promise<LoadResult> {
     if (this.#state !== "initial") {
       throw new Error("invalid host state");
     }
     this.#state = "active";
-    const msg: LoadMessage = { kind: "load", plugin };
+    const msg: LoadMessage = { kind: "load", plugin: this.#plugin };
     this.#worker.postMessage(msg);
     return await this.#loaded;
   }
