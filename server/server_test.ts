@@ -91,7 +91,7 @@ function invokeTest(
       await Timeout.race([srv.ensureLoaded()], 5000);
       await Timeout.race([fn(host, srv)], 5000);
     } finally {
-      srv.stop();
+      await Timeout.race([srv.stop()], 5000);
       await Timeout.race([stopped], 5000);
     }
   });

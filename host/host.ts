@@ -25,8 +25,8 @@ export class PluginHost {
   //  After any worker is loaded, #state becomes 'ready' and #started completes
   //  If MAX_LOAD_FAILURES workers fail to load in a row, #state becomes 'failed'
   //    If #started hasn't completed yet, it's rejected
-  //  On shutdown(), #state becomes 'closing'
-  //  On terminate() (directly or in shutdown), #state becomes 'closed' and #shutdown completes
+  //  On shutdown(), #state becomes 'closing', and #shutdown completes
+  //  On terminate() #state becomes 'closed' and #shutdown completes (if not already)
   #state: PluginHostStatus["state"];
   #started: Deferred<void>;
   #shutdown: Deferred<void>;
@@ -42,6 +42,7 @@ export class PluginHost {
   #idle: Worker[];
   #waiters: Deferred<Worker>[];
   #reload: Deferred<void>;
+  #poolClosed: Promise<void>;
 
   #invocations = 0;
   #invoked: Map<string, Deferred<InvokeResult>>;
@@ -56,7 +57,7 @@ export class PluginHost {
     this.#started = deferred();
     this.#shutdown = deferred();
     this.#reload = deferred();
-    this.#maintainPool();
+    this.#poolClosed = this.#maintainPool();
   }
 
   /** The current status of the host. */
@@ -156,6 +157,8 @@ export class PluginHost {
     }
     this.#state = "closing";
     await Promise.allSettled(this.#invoked.values());
+    this.#shutdown.resolve();
+    await this.#poolClosed;
     this.terminate();
   }
 
@@ -163,6 +166,8 @@ export class PluginHost {
   terminate() {
     if (this.#state !== "closed") {
       this.#state = "closed";
+      this.#shutdown.resolve();
+
       for (const cid of this.#invoked.keys()) {
         this.#completeInvoke(cid, {
           error: {
@@ -172,10 +177,17 @@ export class PluginHost {
         });
       }
       this.#invoked.clear();
+
       for (const worker of this.#workers) {
         worker.terminate();
       }
-      this.#shutdown.resolve();
+      this.#workers.clear();
+      this.#idle = [];
+
+      for (const waiter of this.#waiters) {
+        waiter.reject(new Error("Worker was terminated"));
+      }
+      this.#waiters = [];
     }
   }
 
@@ -198,6 +210,7 @@ export class PluginHost {
 
         if (result.success) {
           failureCount = 0;
+          this.#loadSuccess = result;
           this.#workers.add(worker);
           this.#workerReady(worker);
           if (this.#state === "loading") {
@@ -205,8 +218,8 @@ export class PluginHost {
             this.#started.resolve();
           }
         } else {
+          this.#loadFailure = result;
           this.#workerFailed(worker);
-          failureCount++;
           if (failureCount >= MAX_LOAD_FAILURES) {
             switch (this.#state) {
               case "loading":
@@ -226,7 +239,7 @@ export class PluginHost {
 
         // if all workers are down, reload immediately; else wait a bit
         if (this.#workers.size) {
-          await delay(RELOAD_DELAY_MS);
+          await Promise.race([this.#shutdown, delay(RELOAD_DELAY_MS)]);
         }
       }
     } while (running());

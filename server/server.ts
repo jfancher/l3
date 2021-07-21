@@ -78,9 +78,9 @@ export class Server {
   }
 
   /** Stops the HTTP server. */
-  stop() {
+  async stop() {
     this.#abort.abort();
-    this.#host.terminate();
+    await this.#host.shutdown();
   }
 
   /** GET /status */
