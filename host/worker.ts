@@ -10,7 +10,10 @@ import {
   LoadResultMessage,
   PluginMessage,
 } from "./worker_api.ts";
-import { openInvocationContext, closeInvocationContext } from "./worker_context.ts";
+import {
+  closeInvocationContext,
+  openInvocationContext,
+} from "./worker_context.ts";
 import { logBuffer } from "./worker_log.ts";
 
 // The loaded plugin module.

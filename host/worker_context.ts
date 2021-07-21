@@ -15,10 +15,10 @@ let current: InvocationContext | null = null;
 
 /**
  * Initializes a restricted global environment for an invocation.
- * 
+ *
  * The context should be closed with `closeInvocationContext` when the current plugin call is
  * finished to clean up resources, and _must_ be closed before the next call to this function.
- * 
+ *
  * @param cid The call id
  * @param globals Additional values to add to the global environment
  */
