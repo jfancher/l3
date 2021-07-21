@@ -2,9 +2,9 @@ import {
   assertEquals,
   assertThrowsAsync,
 } from "https://deno.land/std@0.95.0/testing/asserts.ts";
+import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
-import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 
 Deno.test("worker > invoke success", async () => {
   const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
