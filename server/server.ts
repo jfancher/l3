@@ -1,11 +1,10 @@
-import { Deferred, deferred } from "https://deno.land/std@0.95.0/async/mod.ts";
 import {
   Application,
   RouteParams,
   Router,
   RouterContext,
 } from "https://deno.land/x/oak@v7.5.0/mod.ts";
-import { InvokeResult, LoadResult, Plugin, PluginHost } from "../host/mod.ts";
+import { InvokeResult, Plugin, PluginHost } from "../host/mod.ts";
 import {
   ErrorDetails,
   INVOKE_STATUS,
@@ -40,10 +39,7 @@ export class Server {
   #port: number;
   #host: PluginHost;
   #running: boolean;
-  #status: StatusResponse;
   #abort: AbortController;
-  #loaded: Deferred<void>;
-  #nextHost?: PluginHost;
 
   /**
    * Initializes a new plugin server.
@@ -56,9 +52,7 @@ export class Server {
     this.#port = port;
     this.#host = new PluginHost(plugin);
     this.#running = false;
-    this.#status = { module: plugin.module, status: "Loading" };
     this.#abort = new AbortController();
-    this.#loaded = deferred<void>();
   }
 
   /** Runs the HTTP server. */
@@ -66,9 +60,7 @@ export class Server {
     if (this.#running) {
       throw new Error("Server may only be run once.");
     }
-
     this.#running = true;
-    this.#load();
 
     const router = new Router();
     router.get("/status", (ctx) => this.#handleStatus(ctx));
@@ -81,57 +73,35 @@ export class Server {
   }
 
   /** Returns a promise that completes when plugin loading finishes (successfully or not). */
-  async ensureLoaded() {
-    await this.#loaded;
+  ensureLoaded() {
+    return this.#host.ensureLoaded();
   }
 
   /** Stops the HTTP server. */
   stop() {
     this.#abort.abort();
     this.#host.terminate();
-    this.#nextHost?.terminate();
-  }
-
-  /** Loads the plugin module. */
-  async #load() {
-    const result = await this.#host.load();
-    this.#updateLoadStatus(result);
-    this.#loaded.resolve();
-  }
-
-  /** Enqueues a reload of the plugin into a new host, shutting down the current one. */
-  #scheduleReload() {
-    if (this.#nextHost) {
-      return;
-    }
-
-    this.#nextHost = new PluginHost(this.#plugin);
-    (async () => {
-      const result = await this.#nextHost!.load();
-      this.#updateLoadStatus(result);
-      this.#host = this.#nextHost!;
-      this.#nextHost = undefined;
-    })();
-  }
-
-  /** Updates the host status based when plugin loading completes. */
-  #updateLoadStatus(result: LoadResult) {
-    if (result.success) {
-      this.#status.status = "OK";
-      this.#status.functionNames = result.functionNames;
-    } else {
-      this.#status.status = "LoadFailed";
-      this.#status.error = result.error;
-    }
   }
 
   /** GET /status */
   #handleStatus(ctx: Ctx) {
-    ctx.response.status = SERVER_STATUS[this.#status.status];
-    ctx.response.body = {
-      ...this.#status,
+    const status = this.#host.status;
+    const response: StatusResponse = {
+      module: this.#plugin.module,
+      status: "OK",
+      functionNames: status.functionNames,
       memoryUsage: Deno.memoryUsage(),
     };
+
+    if (status.state === "loading") {
+      response.status = "Loading";
+    } else if (status.state === "failed") {
+      response.status = "LoadFailed";
+      response.error = status.loadError;
+    }
+
+    ctx.response.status = SERVER_STATUS[response.status];
+    ctx.response.body = response;
   }
 
   /** POST /invoke/:func */
@@ -163,12 +133,13 @@ export class Server {
       return;
     }
 
-    switch (this.#status.status) {
-      case "Loading":
+    const status = this.#host.status;
+    switch (status.state) {
+      case "loading":
         fail("Unavailable", new Error("module is loading"));
         return;
-      case "LoadFailed":
-        fail("Unavailable", this.#status.error!);
+      case "failed":
+        fail("Unavailable", status.loadError!);
         return;
     }
 
@@ -182,7 +153,7 @@ export class Server {
       return;
     }
 
-    if (!this.#status.functionNames?.includes(func)) {
+    if (!status.functionNames.includes(func)) {
       fail("NotFound", new Error(`function "${func}" does not exist`));
       return;
     }
@@ -213,8 +184,7 @@ export class Server {
 
   /**
    * Adds a timeout to a request; if the call doesn't complete in a given number of seconds, the
-   * provided abort controller is signalled. The current host will then be terminated and swapped
-   * for a new one.
+   * provided abort controller is signalled.
    *
    * @param call The invocation promise
    * @param ctl The abort controller
@@ -226,7 +196,6 @@ export class Server {
     msec: number,
   ) {
     const timerId = setTimeout(() => ctl.abort(), msec);
-    ctl.signal.addEventListener("abort", () => this.#scheduleReload());
     try {
       return await call;
     } finally {

@@ -11,4 +11,7 @@ export interface Plugin {
 
   /** Additional global values to set for plugin invocations. */
   globals?: Record<string, unknown>;
+
+  /** The number of concurrent workers to create. */
+  concurrency?: number;
 }
