@@ -1,4 +1,4 @@
-import { deferred, delay } from "https://deno.land/std@0.95.0/async/mod.ts";
+import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import * as log from "https://deno.land/std@0.95.0/log/mod.ts";
 
 export function fn(arg: { name: string }): { message: string } {
@@ -9,14 +9,6 @@ export function fn(arg: { name: string }): { message: string } {
 
 export async function afn(s: string) {
   return await Promise.resolve(`afn: ${s}`);
-}
-
-const concurDone = deferred<string>();
-export async function concur(val: string | null) {
-  if (val) {
-    concurDone.resolve(val);
-  }
-  return await concurDone;
 }
 
 export function spin() {
@@ -85,4 +77,11 @@ export function doFetchLeak(url?: string) {
 declare const MY_KEY: number;
 export function useGlobal(arg: string) {
   return `${arg}: ${MY_KEY}`;
+}
+
+let concurCalls = 0;
+export async function concur() {
+  concurCalls++;
+  await delay(50);
+  return concurCalls;
 }

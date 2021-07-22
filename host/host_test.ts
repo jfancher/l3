@@ -2,12 +2,13 @@ import {
   assertEquals,
   assertThrowsAsync,
 } from "https://deno.land/std@0.95.0/testing/asserts.ts";
+import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
 
 Deno.test("worker > invoke success", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
   const result = await host.invoke("fn", { name: "test" });
   assertEquals(result.value, { message: "name: test" });
   assertEquals(result.logs, [
@@ -18,32 +19,17 @@ Deno.test("worker > invoke success", async () => {
 });
 
 Deno.test("worker > invoke async", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
   const result = await host.invoke("afn", "str");
 
   assertEquals(result.value, "afn: str");
   host.terminate();
 });
 
-Deno.test({
-  name: "worker > invoke concurrent",
-  ignore: true, // reverted to serial; logging at least needs more work
-  fn: async () => {
-    const host = new PluginHost();
-    await host.load({ module: "./testdata/test_plugin.ts" });
-
-    const first = host.invoke("concur", null);
-    const second = host.invoke("concur", "done");
-    assertEquals((await first).value, "done");
-    assertEquals((await second).value, "done");
-    host.terminate();
-  },
-});
-
 Deno.test("worker > terminate", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
   const invoke = host.invoke("spin", null);
   host.terminate();
   const result = await invoke;
@@ -55,8 +41,8 @@ Deno.test("worker > terminate", async () => {
 });
 
 Deno.test("worker > shutdown", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
   const invoke = host.invoke("wait", 50);
   const shutdown = host.shutdown();
   await assertThrowsAsync(() => host.invoke("wait", 50)); // closed to new requests
@@ -67,8 +53,8 @@ Deno.test("worker > shutdown", async () => {
 });
 
 Deno.test("worker > abort", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
 
   const ctl = new AbortController();
   const invoke = host.invoke("spin", null, { signal: ctl.signal });
@@ -84,8 +70,8 @@ Deno.test("worker > abort", async () => {
 });
 
 Deno.test("worker > restricted", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
 
   const result = await host.invoke("doEval", "1");
   assertEquals(result.value, undefined);
@@ -94,8 +80,8 @@ Deno.test("worker > restricted", async () => {
 });
 
 Deno.test("worker > wrap schedule", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
 
   const result1 = await host.invoke("leakAsync", "{}");
   assertEquals(result1.value, 0);
@@ -106,8 +92,8 @@ Deno.test("worker > wrap schedule", async () => {
 });
 
 Deno.test("worker > wrap fetch", async () => {
-  const host = new PluginHost();
-  await host.load({ module: "./testdata/test_plugin.ts" });
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
 
   const srv = serve({ port: 0 });
   const port = (srv.listener.addr as Deno.NetAddr).port;
@@ -146,15 +132,69 @@ Deno.test("worker > wrap fetch", async () => {
 });
 
 Deno.test("worker > global", async () => {
-  const host = new PluginHost();
-
-  await host.load({
+  const host = new PluginHost({
     module: "./testdata/test_plugin.ts",
     globals: { "MY_KEY": 12345 },
   });
+  await host.ensureLoaded();
 
   const result = await host.invoke("useGlobal", "test");
   assertEquals(result.value, "test: 12345");
+
+  host.terminate();
+});
+
+Deno.test("worker > concurrent", async () => {
+  const host = new PluginHost({
+    module: "./testdata/test_plugin.ts",
+    concurrency: 2,
+  });
+
+  // wait for 2 workers; ensureLoaded() only waits for 1
+  let loadTime = 0;
+  while (loadTime < 30_000 && host.status.workers < 2) {
+    await delay(100);
+    loadTime += 100;
+  }
+  assertEquals(host.status.workers, 2);
+
+  // double-check that the two are loaded in different workers
+  const one = host.invoke("concur", null);
+  const two = host.invoke("concur", null);
+  assertEquals((await one).value, 1);
+  assertEquals((await two).value, 1);
+
+  // schedule a few more; they should cycle between workers
+  const three = host.invoke("concur", null);
+  const four = host.invoke("concur", null);
+  const five = host.invoke("concur", null);
+  const six = host.invoke("concur", null);
+  assertEquals((await three).value, 2);
+  assertEquals((await four).value, 2);
+  assertEquals((await five).value, 3);
+  assertEquals((await six).value, 3);
+
+  host.terminate();
+});
+
+Deno.test("worker > reload", async () => {
+  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
+  await host.ensureLoaded();
+
+  const ctl = new AbortController();
+  const first = host.invoke("spin", null, { signal: ctl.signal });
+  const second = host.invoke("afn", "x");
+
+  // first should be aborted, but second should still complete
+  ctl.abort();
+  const result1 = await first;
+  assertEquals(result1.value, undefined);
+  assertEquals(result1.error, {
+    name: "AbortError",
+    message: "Invocation was aborted",
+  });
+  const result2 = await second;
+  assertEquals(result2.value, "afn: x");
 
   host.terminate();
 });

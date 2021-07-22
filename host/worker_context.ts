@@ -11,8 +11,37 @@ type Override<K, T> = (
   prop: PropertyDescriptor,
 ) => PropertyDescriptor;
 
+let current: InvocationContext | null = null;
+
+/**
+ * Initializes a restricted global environment for an invocation.
+ *
+ * The context should be closed with `closeInvocationContext` when the current plugin call is
+ * finished to clean up resources, and _must_ be closed before the next call to this function.
+ *
+ * @param cid The call id
+ * @param globals Additional values to add to the global environment
+ */
+export function openInvocationContext(
+  cid: string,
+  globals?: Record<string, unknown>,
+) {
+  const ctx = new InvocationContext(cid, globals);
+  ctx.set(); // will throw if previous was not closed, no need to check current
+  current = ctx;
+}
+
+/**
+ * Cleans up any current invocation global execution environment (created with
+ * `openInvocationContext`) and restores global values to their defaults.
+ */
+export function closeInvocationContext() {
+  current?.restore();
+  current = null;
+}
+
 /** Creates a restricted execution environment for a plugin invocation. */
-export class InvocationContext {
+class InvocationContext {
   #cid: string;
   #customGlobals: Record<string, unknown>;
   #orig: Record<PropertyKey, PropertyDescriptor>;
@@ -34,7 +63,7 @@ export class InvocationContext {
   }
 
   /** Sets the global environment to the isolated invocation context. */
-  enter() {
+  set() {
     const env = Object(globalThis);
     if (env[cid]) {
       throw new Error(
@@ -64,7 +93,7 @@ export class InvocationContext {
   }
 
   /** Restores the global environment. */
-  exit() {
+  restore() {
     const env = Object(globalThis);
     if (env[cid] !== this.#cid) {
       throw new Error(
