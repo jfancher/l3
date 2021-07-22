@@ -15,7 +15,7 @@ Deno.test("worker > invoke success", async () => {
     { level: "INFO", loggerName: "default", "message": "called fn" },
     { level: "DEBUG", loggerName: "default", "message": `{"name":"test"}` },
   ]);
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > invoke async", async () => {
@@ -24,7 +24,7 @@ Deno.test("worker > invoke async", async () => {
   const result = await host.invoke("afn", "str");
 
   assertEquals(result.value, "afn: str");
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > terminate", async () => {
@@ -66,7 +66,7 @@ Deno.test("worker > abort", async () => {
     name: "AbortError",
     message: "Invocation was aborted",
   });
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > restricted", async () => {
@@ -76,7 +76,7 @@ Deno.test("worker > restricted", async () => {
   const result = await host.invoke("doEval", "1");
   assertEquals(result.value, undefined);
   assertEquals(result.error?.message, "eval is not supported");
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > wrap schedule", async () => {
@@ -88,7 +88,7 @@ Deno.test("worker > wrap schedule", async () => {
 
   const result2 = await host.invoke("leakAsync", "{}");
   assertEquals(result2.value, 0);
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > wrap fetch", async () => {
@@ -128,7 +128,7 @@ Deno.test("worker > wrap fetch", async () => {
   assertEquals(result5.value, "Request aborted.");
 
   srv.close();
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > global", async () => {
@@ -141,7 +141,7 @@ Deno.test("worker > global", async () => {
   const result = await host.invoke("useGlobal", "test");
   assertEquals(result.value, "test: 12345");
 
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > concurrent", async () => {
@@ -174,7 +174,7 @@ Deno.test("worker > concurrent", async () => {
   assertEquals((await five).value, 3);
   assertEquals((await six).value, 3);
 
-  host.terminate();
+  await host.shutdown();
 });
 
 Deno.test("worker > reload", async () => {
@@ -196,5 +196,14 @@ Deno.test("worker > reload", async () => {
   const result2 = await second;
   assertEquals(result2.value, "afn: x");
 
-  host.terminate();
+  await host.shutdown();
+});
+
+Deno.test("worker > load failure", async () => {
+  const host = new PluginHost({ module: "./testdata/invalid_plugin.ts" });
+  await host.ensureLoaded();
+  assertEquals(host.status.state, "failed");
+  assertEquals(host.status.loadError?.message, "must fail to load");
+
+  await host.shutdown();
 });

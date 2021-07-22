@@ -24,7 +24,7 @@ export class PluginHost {
   //  #state starts as 'loading'
   //  After any worker is loaded, #state becomes 'ready' and #started completes
   //  If MAX_LOAD_FAILURES workers fail to load in a row, #state becomes 'failed'
-  //    If #started hasn't completed yet, it's rejected
+  //    If #started hasn't completed yet, it's resolved
   //  On shutdown(), #state becomes 'closing', and #shutdown completes
   //  On terminate() #state becomes 'closed' and #shutdown completes (if not already)
   #state: PluginHostStatus["state"];
@@ -218,12 +218,13 @@ export class PluginHost {
             this.#started.resolve();
           }
         } else {
+          failureCount++;
           this.#loadFailure = result;
           this.#workerFailed(worker);
           if (failureCount >= MAX_LOAD_FAILURES) {
             switch (this.#state) {
               case "loading":
-                this.#started.reject(new Error("loading failed"));
+                this.#started.resolve();
                 // fallthrough
               case "ready":
                 this.#state = "failed";
