@@ -1,6 +1,8 @@
 /// <reference no-default-lib="true" />
 /// <reference lib="deno.worker" />
 
+import { FetchRecord } from "./result.ts";
+
 // Set on the global object to indicate the current call id.
 const cid = Symbol("cid");
 
@@ -25,8 +27,9 @@ let current: InvocationContext | null = null;
 export function openInvocationContext(
   cid: string,
   globals?: Record<string, unknown>,
+  logger?: Logger,
 ) {
-  const ctx = new InvocationContext(cid, globals);
+  const ctx = new InvocationContext(cid, globals, logger);
   ctx.set(); // will throw if previous was not closed, no need to check current
   current = ctx;
 }
@@ -40,6 +43,12 @@ export function closeInvocationContext() {
   current = null;
 }
 
+/** Logs global events that occur during an invocation. */
+export interface Logger {
+  /** Called when a  */
+  fetch?: (rec: FetchRecord) => void;
+}
+
 /** Creates a restricted execution environment for a plugin invocation. */
 class InvocationContext {
   #cid: string;
@@ -47,16 +56,19 @@ class InvocationContext {
   #orig: Record<PropertyKey, PropertyDescriptor>;
   #timers: Set<number>;
   #abort: AbortController;
+  #logger: Logger;
 
   /**
    * Initializes a new invocation context.
    *
    * @param cid The call id
    * @param globals Additional values to add to the global environment
+   * @param logger The event logger
    */
-  constructor(cid: string, globals?: Record<string, unknown>) {
+  constructor(cid: string, globals?: Record<string, unknown>, logger?: Logger) {
     this.#cid = cid;
     this.#customGlobals = globals ?? {};
+    this.#logger = logger ?? {};
     this.#orig = {};
     this.#timers = new Set();
     this.#abort = new AbortController();
@@ -122,24 +134,39 @@ class InvocationContext {
 
   /** Binds a call to fetch to the active invocation. */
   #fetch(fn: typeof fetch, ...[input, init]: Parameters<typeof fetch>) {
-    // Connect to the invoke abort signal, keeping any existing one.
-    const invokeSignal = this.#abort.signal;
-    let finalSignal = this.#abort.signal;
-    if (init?.signal !== undefined) {
-      if (init.signal !== null) { // null means none, distinct from undefined
-        finalSignal = joinSignals(init.signal, invokeSignal);
-      }
-    } else if (input instanceof Request) {
-      if (input.signal) {
-        finalSignal = joinSignals(input.signal, invokeSignal);
-      }
+    // Create a base request to handle the various ways it can be initialized.
+    if (input instanceof URL) {
+      input = input.href;
     }
+    input = new Request(input, init);
 
-    // Turn an abort from invokeSignal into a 408 (Request Timeout) response.
+    const record = newFetchRecord(input);
+
+    // Create a customized (re-)initializer, with:
+    // - A signal that aborts when the invocation is done.
+    // - A custom invocation id header.
+    // - A body that logs its size
+    init = {
+      signal: joinSignals(input.signal, this.#abort.signal),
+      headers: { "Yext-Invocation-ID": this.#cid },
+      body: input.body?.pipeThrough(
+        new TransformStream({
+          transform(chunk, ctl) {
+            record.sentBytes += chunk.byteLength;
+            ctl.enqueue(chunk);
+          },
+        }),
+      ),
+    };
+
+    //
+    let p = fn(input, init);
+
+    // Turn an abort from an invocation ending into a 408 (Request Timeout) response.
     // This is mostly so that Deno doesn't crash on the unobserved rejection,
     // which is likely what will happen if a fetch ends up leaking.
-    const p = fn(input, { ...init, signal: finalSignal });
-    return p.catch((e) => {
+    const invokeSignal = this.#abort.signal;
+    p = p.catch((e) => {
       if (e?.name === "AbortError" && invokeSignal.aborted) {
         return new Response(null, {
           status: 408,
@@ -148,6 +175,24 @@ class InvocationContext {
       }
       throw e;
     });
+
+    // Log response metadata to the fetch record.
+    // Rely on Content-Length for the body size; there seems to be no clean way to replace the body
+    // with a logging stream as with the request, and alternatives could require reading the whole
+    // thing into memory.
+    p = p.then((rsp) => {
+      record.status = rsp.status;
+      record.statusText = rsp.statusText;
+      record.endTime = new Date().toISOString();
+      const length = parseInt(rsp.headers.get("Content-Length") ?? "");
+      if (!Number.isNaN(length)) {
+        record.receivedBytes = length;
+      }
+      this.#logger.fetch?.(record);
+      return rsp;
+    });
+
+    return p;
   }
 
   /** Specifies how to handle each defined global. */
@@ -344,4 +389,20 @@ function joinSignals(...signals: AbortSignal[]) {
     }
   }
   return ctl.signal;
+}
+
+// Initializes a FetchRecord for a request.
+function newFetchRecord(req: Request): FetchRecord {
+  const url = new URL(req.url);
+  return {
+    scheme: url.protocol.substring(0, url.protocol.length - 1), // trim :
+    host: url.hostname,
+    method: req.method,
+    status: 0,
+    statusText: "",
+    startTime: new Date().toISOString(),
+    endTime: "",
+    sentBytes: 0,
+    receivedBytes: 0,
+  };
 }

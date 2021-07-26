@@ -20,6 +20,9 @@ export interface InvokeResult {
 
   /** Any messages logged during the invocation. */
   logs: LogRecord[];
+
+  /** Metadata about fetches performed. */
+  fetches: FetchRecord[];
 }
 
 /**
@@ -51,4 +54,34 @@ export interface LogRecord {
 
   /** The message. */
   message: string;
+}
+
+/** Metadata about a fetch performed during an invocation. */
+export interface FetchRecord {
+  /** The request scheme. */
+  scheme: string;
+
+  /** The remote host. */
+  host: string;
+
+  /** The HTTP method. */
+  method: string;
+
+  /** The response status code. */
+  status: number;
+
+  /** The response status text. */
+  statusText: string;
+
+  /** The time at which the request was made. */
+  startTime: string;
+
+  /** The time at which the response was received. */
+  endTime: string;
+
+  /** Sent body size. */
+  sentBytes: number;
+
+  /** Received body size. */
+  receivedBytes: number;
 }

@@ -48,7 +48,7 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
   }
 
   try {
-    openInvocationContext("load", msg.plugin.globals);
+    openInvocationContext("", msg.plugin.globals);
     module = await import(msg.plugin.module);
     plugin = msg.plugin;
     result.success = true;
@@ -71,6 +71,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
     cid: msg.cid,
     value: undefined,
     logs: [],
+    fetches: [],
   };
 
   if (!plugin) {
@@ -85,7 +86,9 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
   }
 
   try {
-    openInvocationContext(msg.cid, plugin.globals);
+    openInvocationContext(msg.cid, plugin.globals, {
+      fetch: (rec) => result.fetches.push(rec),
+    });
     result.value = await Promise.resolve(fn(msg.argument));
   } catch (e) {
     result.error = createError(e);

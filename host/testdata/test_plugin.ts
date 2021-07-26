@@ -46,8 +46,13 @@ export async function doFetch(url: string) {
     urlResult = await urlResponse.json();
   }
 
-  // fetch(Request)
-  const reqResponse = await fetch(new Request(url, { method: "CUSTOM" }));
+  // fetch(Request) + Body
+  const reqResponse = await fetch(
+    new Request(url, {
+      body: `${url} body`,
+      method: "CUSTOM",
+    }),
+  );
   let reqResult = reqResponse.statusText;
   if (reqResponse.ok) {
     reqResult = await reqResponse.json();

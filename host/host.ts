@@ -138,6 +138,7 @@ export class PluginHost {
       const r: InvokeResult = {
         value: result.value ?? undefined,
         logs: result.logs ?? [],
+        fetches: result.fetches ?? [],
       };
       if (result.error) {
         r.error = result.error;
@@ -274,6 +275,7 @@ export class PluginHost {
           const result: InvokeResult = {
             value: e.data.value,
             logs: e.data.logs,
+            fetches: e.data.fetches,
           };
           if ("error" in e.data) {
             result.error = e.data.error;

@@ -113,6 +113,7 @@ export class Server {
       status: "OK",
       result: undefined,
       logs: [],
+      fetches: [],
     };
     ctx.response.body = body;
 
@@ -173,6 +174,7 @@ export class Server {
       const result = await call;
       body.result = result.value;
       body.logs = result.logs;
+      body.fetches = result.fetches;
       if (result.error) {
         fail("RuntimeError", result.error);
       }

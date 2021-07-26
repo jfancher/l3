@@ -1,10 +1,14 @@
 import {
+  assert,
   assertEquals,
+  assertObjectMatch,
   assertThrowsAsync,
+  assertExists,
 } from "https://deno.land/std@0.95.0/testing/asserts.ts";
 import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
+import { FetchRecord } from "./result.ts";
 
 Deno.test("worker > invoke success", async () => {
   const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
@@ -112,6 +116,33 @@ Deno.test("worker > wrap fetch", async () => {
     "GET /test?url",
     "CUSTOM /test",
   ]);
+  assertFetch(result1.fetches?.[0], {
+    scheme: "http",
+    host: "localhost",
+    method: "GET",
+    status: 200,
+    statusText: "OK",
+    sentBytes: 0,
+    receivedBytes: `"GET /test?string"`.length,
+  });
+  assertFetch(result1.fetches?.[1], {
+    scheme: "http",
+    host: "localhost",
+    method: "GET",
+    status: 200,
+    statusText: "OK",
+    sentBytes: 0,
+    receivedBytes: `"GET /test?url"`.length,
+  });
+  assertFetch(result1.fetches?.[2], {
+    scheme: "http",
+    host: "localhost",
+    method: "CUSTOM",
+    status: 200,
+    statusText: "OK",
+    sentBytes: `${url} body`.length,
+    receivedBytes: `"CUSTOM /test"`.length,
+  });
 
   // fetch with explicit abort
   const result2 = await host.invoke("fetchAbort", { url, abort: true });
@@ -207,3 +238,22 @@ Deno.test("worker > load failure", async () => {
 
   await host.shutdown();
 });
+
+function assertFetch(
+  actual: FetchRecord | undefined,
+  expected: Partial<FetchRecord>,
+) {
+  const [minDuration, maxDuration] = [1, 50];
+  assertExists(actual);
+  assertObjectMatch(actual!, expected);
+
+  const start = Date.parse(actual!.startTime ?? "");
+  assert(!Number.isNaN(start), "start is invalid");
+
+  const end = Date.parse(actual!.endTime ?? "");
+  assert(!Number.isNaN(end), "end is invalid");
+
+  const duration = end - start;
+  assert(duration >= minDuration, `duration ${duration} < ${minDuration}`);
+  assert(duration <= maxDuration, `duration ${duration} > ${maxDuration}`);
+}
