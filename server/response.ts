@@ -1,6 +1,6 @@
-import { ErrorDetails, LogRecord } from "../host/result.ts";
+import { ErrorDetails, FetchRecord, LogRecord } from "../host/result.ts";
 
-export type { ErrorDetails, LogRecord };
+export type { ErrorDetails, FetchRecord, LogRecord };
 
 /** Response to a /status request. */
 export interface StatusResponse {
@@ -75,6 +75,9 @@ export interface InvokeResponse {
 
   /** Any messages logged during the invocation. */
   logs: LogRecord[];
+
+  /** Records of fetches performed during the invocation. */
+  fetches: FetchRecord[];
 }
 
 /** Maps invoke status strings to HTTP status codes. */

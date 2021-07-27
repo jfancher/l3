@@ -1,6 +1,8 @@
 /// <reference no-default-lib="true" />
 /// <reference lib="deno.worker" />
 
+import { FetchRecord } from "./result.ts";
+
 // Set on the global object to indicate the current call id.
 const cid = Symbol("cid");
 
@@ -17,7 +19,7 @@ let current: InvocationContext | null = null;
  * Initializes a restricted global environment for an invocation.
  *
  * The context should be closed with `closeInvocationContext` when the current plugin call is
- * finished to clean up resources, and _must_ be closed before the next call to this function.
+ * finished to perform cleanup, and _must_ be closed before the next call to this function.
  *
  * @param cid The call id
  * @param globals Additional values to add to the global environment
@@ -25,41 +27,59 @@ let current: InvocationContext | null = null;
 export function openInvocationContext(
   cid: string,
   globals?: Record<string, unknown>,
+  logger?: Logger,
 ) {
-  const ctx = new InvocationContext(cid, globals);
+  const ctx = new InvocationContext(cid, globals, logger);
   ctx.set(); // will throw if previous was not closed, no need to check current
   current = ctx;
 }
 
 /**
- * Cleans up any current invocation global execution environment (created with
+ * Finalizes the current invocation global execution environment (created with
  * `openInvocationContext`) and restores global values to their defaults.
  */
 export function closeInvocationContext() {
-  current?.restore();
+  current?.close();
   current = null;
+}
+
+/** Logs global events that occur during an invocation. */
+export interface Logger {
+  /**
+   * Called when a `fetch` has been performed and the response's body has been
+   * fully read.
+   *
+   * If a response body is never read, the fetch will be logged when the call
+   * is finalized via `closeInvocationContext`.
+   */
+  fetch?: (rec: FetchRecord) => void;
 }
 
 /** Creates a restricted execution environment for a plugin invocation. */
 class InvocationContext {
   #cid: string;
   #customGlobals: Record<string, unknown>;
+  #logger: Logger;
   #orig: Record<PropertyKey, PropertyDescriptor>;
-  #timers: Set<number>;
   #abort: AbortController;
+  #timers: Set<number>;
+  #fetches: Set<FetchRecord>;
 
   /**
    * Initializes a new invocation context.
    *
    * @param cid The call id
    * @param globals Additional values to add to the global environment
+   * @param logger The event logger
    */
-  constructor(cid: string, globals?: Record<string, unknown>) {
+  constructor(cid: string, globals?: Record<string, unknown>, logger?: Logger) {
     this.#cid = cid;
     this.#customGlobals = globals ?? {};
+    this.#logger = logger ?? {};
     this.#orig = {};
     this.#timers = new Set();
     this.#abort = new AbortController();
+    this.#fetches = new Set();
   }
 
   /** Sets the global environment to the isolated invocation context. */
@@ -92,13 +112,18 @@ class InvocationContext {
     }
   }
 
-  /** Restores the global environment. */
-  restore() {
+  /** Finalizes the invocation and restores the global environment. */
+  close() {
     const env = Object(globalThis);
     if (env[cid] !== this.#cid) {
       throw new Error(
         `Context '${this.#cid}' not active (current: '${env[cid]}').`,
       );
+    }
+
+    // If there are leftover fetch records (body was never read), log them now.
+    for (const record of this.#fetches) {
+      this.#logFetch(record);
     }
 
     for (const key in this.#customGlobals) {
@@ -122,24 +147,36 @@ class InvocationContext {
 
   /** Binds a call to fetch to the active invocation. */
   #fetch(fn: typeof fetch, ...[input, init]: Parameters<typeof fetch>) {
-    // Connect to the invoke abort signal, keeping any existing one.
-    const invokeSignal = this.#abort.signal;
-    let finalSignal = this.#abort.signal;
-    if (init?.signal !== undefined) {
-      if (init.signal !== null) { // null means none, distinct from undefined
-        finalSignal = joinSignals(init.signal, invokeSignal);
-      }
-    } else if (input instanceof Request) {
-      if (input.signal) {
-        finalSignal = joinSignals(input.signal, invokeSignal);
-      }
+    // Create a base request to handle the various ways it can be initialized.
+    if (input instanceof URL) {
+      input = input.href;
     }
+    input = new Request(input, init);
 
-    // Turn an abort from invokeSignal into a 408 (Request Timeout) response.
+    const record = this.#newFetchRecord(input);
+
+    // Call fetch with a customized (re-)initializer including:
+    // - A signal that aborts when the invocation is done
+    // - A custom invocation id header (if there is one)
+    // - A body that logs its size
+    init = {
+      signal: joinSignals(input.signal, this.#abort.signal),
+      body: input.body?.pipeThrough(
+        new StreamObserver({
+          observe: (c) => record.sentBytes += c.byteLength,
+        }),
+      ),
+    };
+    if (this.#cid) {
+      init.headers = { "Yext-Invocation-ID": this.#cid };
+    }
+    let p = fn(input, init);
+
+    // Turn an abort from an invocation ending into a 408 (Request Timeout) response.
     // This is mostly so that Deno doesn't crash on the unobserved rejection,
     // which is likely what will happen if a fetch ends up leaking.
-    const p = fn(input, { ...init, signal: finalSignal });
-    return p.catch((e) => {
+    const invokeSignal = this.#abort.signal;
+    p = p.catch((e) => {
       if (e?.name === "AbortError" && invokeSignal.aborted) {
         return new Response(null, {
           status: 408,
@@ -148,6 +185,63 @@ class InvocationContext {
       }
       throw e;
     });
+
+    // Log response metadata to the fetch record.
+    p = p.then((rsp) => {
+      record.status = rsp.status;
+      record.statusText = rsp.statusText;
+
+      // If there's no body, go ahead and log now.
+      if (!rsp.body) {
+        this.#logFetch(record);
+        return rsp;
+      }
+
+      // Otherwise, wrap the body to record as it's read.
+      // The caller doesn't have to read it at all; in this case,
+      // the log will happen at the end of the call.
+      const body = rsp.body.pipeThrough(
+        new StreamObserver({
+          observe: (c) => record.receivedBytes += c.byteLength,
+          done: () => this.#logFetch(record),
+        }),
+      );
+
+      // Subclass Response to retain metadata; passing the wrapped one to the constructor only
+      // copies status and headers (and derived properties).
+      return new class extends Response {
+        readonly redirected = rsp.redirected;
+        readonly url = rsp.url;
+        readonly type = rsp.type;
+      }(body, rsp);
+    });
+
+    return p;
+  }
+
+  /** Creates a new fetch record and adds it to the pending set. */
+  #newFetchRecord(req: Request) {
+    const url = new URL(req.url);
+    const record = {
+      scheme: url.protocol.substring(0, url.protocol.length - 1), // trim :
+      host: url.hostname,
+      method: req.method,
+      status: 0,
+      statusText: "",
+      startTime: new Date().toISOString(),
+      endTime: "",
+      sentBytes: 0,
+      receivedBytes: 0,
+    };
+    this.#fetches.add(record);
+    return record;
+  }
+
+  /** Logs a fetch record and remove it from the pending set.  */
+  #logFetch(record: FetchRecord) {
+    record.endTime = new Date().toISOString();
+    this.#logger.fetch?.(record);
+    this.#fetches.delete(record);
   }
 
   /** Specifies how to handle each defined global. */
@@ -344,4 +438,19 @@ function joinSignals(...signals: AbortSignal[]) {
     }
   }
   return ctl.signal;
+}
+
+// A TransformStream that passes through contents after invoking a callback.
+class StreamObserver<T> extends TransformStream<T, T> {
+  constructor(observer: { observe: (chunk: T) => void; done?: () => void }) {
+    super({
+      transform(chunk, ctl) {
+        observer.observe?.(chunk);
+        ctl.enqueue(chunk);
+      },
+      flush() {
+        observer.done?.();
+      },
+    });
+  }
 }
