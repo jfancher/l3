@@ -8,32 +8,26 @@ import {
 import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { serve } from "https://deno.land/std@0.95.0/http/server.ts";
 import { PluginHost } from "./host.ts";
+import { Plugin } from "./plugin.ts";
 import { FetchRecord } from "./result.ts";
 
-Deno.test("worker > invoke success", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
+hostTest("worker > invoke success", {}, async (host) => {
   const result = await host.invoke("fn", { name: "test" });
   assertEquals(result.value, { message: "name: test" });
   assertEquals(result.logs, [
     { level: "INFO", loggerName: "default", "message": "called fn" },
     { level: "DEBUG", loggerName: "default", "message": `{"name":"test"}` },
   ]);
-  await host.shutdown();
 });
 
-Deno.test("worker > invoke async", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
+hostTest("worker > invoke async", {}, async (host) => {
   const result = await host.invoke("afn", "str");
-
   assertEquals(result.value, "afn: str");
-  await host.shutdown();
 });
 
-Deno.test("worker > terminate", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
+hostTest("worker > terminate", {}, async (host, ctl) => {
+  ctl.shutdown = false;
+
   const invoke = host.invoke("spin", null);
   host.terminate();
   const result = await invoke;
@@ -44,9 +38,9 @@ Deno.test("worker > terminate", async () => {
   });
 });
 
-Deno.test("worker > shutdown", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
+hostTest("worker > shutdown", {}, async (host, ctl) => {
+  ctl.shutdown = false;
+
   const invoke = host.invoke("wait", 50);
   const shutdown = host.shutdown();
   await assertThrowsAsync(() => host.invoke("wait", 50)); // closed to new requests
@@ -56,10 +50,7 @@ Deno.test("worker > shutdown", async () => {
   assertEquals(result.value, 50);
 });
 
-Deno.test("worker > abort", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
-
+hostTest("worker > abort", {}, async (host) => {
   const ctl = new AbortController();
   const invoke = host.invoke("spin", null, { signal: ctl.signal });
   ctl.abort();
@@ -70,35 +61,23 @@ Deno.test("worker > abort", async () => {
     name: "AbortError",
     message: "Invocation was aborted",
   });
-  await host.shutdown();
 });
 
-Deno.test("worker > restricted", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
-
+hostTest("worker > restricted", {}, async (host) => {
   const result = await host.invoke("doEval", "1");
   assertEquals(result.value, undefined);
   assertEquals(result.error?.message, "eval is not supported");
-  await host.shutdown();
 });
 
-Deno.test("worker > wrap schedule", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
-
+hostTest("worker > wrap schedule", {}, async (host) => {
   const result1 = await host.invoke("leakAsync", "{}");
   assertEquals(result1.value, 0);
 
   const result2 = await host.invoke("leakAsync", "{}");
   assertEquals(result2.value, 0);
-  await host.shutdown();
 });
 
-Deno.test("worker > wrap fetch", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
-
+hostTest("worker > wrap fetch", {}, async (host, ctl) => {
   const srv = serve({ port: 0 });
   const port = (srv.listener.addr as Deno.NetAddr).port;
   (async () => {
@@ -106,6 +85,7 @@ Deno.test("worker > wrap fetch", async () => {
       req.respond({ body: `"${req.method} ${req.url}"` });
     }
   })();
+  ctl.after(() => srv.close());
 
   const url = `http://localhost:${port}/test`;
 
@@ -157,30 +137,14 @@ Deno.test("worker > wrap fetch", async () => {
   assertEquals(result4.value, "No value.");
   const result5 = await host.invoke("doFetchLeak", undefined);
   assertEquals(result5.value, "Request aborted.");
-
-  srv.close();
-  await host.shutdown();
 });
 
-Deno.test("worker > global", async () => {
-  const host = new PluginHost({
-    module: "./testdata/test_plugin.ts",
-    globals: { "MY_KEY": 12345 },
-  });
-  await host.ensureLoaded();
-
+hostTest("worker > global", { globals: { "MY_KEY": 12345 } }, async (host) => {
   const result = await host.invoke("useGlobal", "test");
   assertEquals(result.value, "test: 12345");
-
-  await host.shutdown();
 });
 
-Deno.test("worker > concurrent", async () => {
-  const host = new PluginHost({
-    module: "./testdata/test_plugin.ts",
-    concurrency: 2,
-  });
-
+hostTest("worker > concurrent", { concurrency: 2 }, async (host) => {
   // wait for 2 workers; ensureLoaded() only waits for 1
   let loadTime = 0;
   while (loadTime < 30_000 && host.status.workers < 2) {
@@ -204,14 +168,9 @@ Deno.test("worker > concurrent", async () => {
   assertEquals((await four).value, 2);
   assertEquals((await five).value, 3);
   assertEquals((await six).value, 3);
-
-  await host.shutdown();
 });
 
-Deno.test("worker > reload", async () => {
-  const host = new PluginHost({ module: "./testdata/test_plugin.ts" });
-  await host.ensureLoaded();
-
+hostTest("worker > reload", {}, async (host) => {
   const ctl = new AbortController();
   const first = host.invoke("spin", null, { signal: ctl.signal });
   const second = host.invoke("afn", "x");
@@ -226,18 +185,54 @@ Deno.test("worker > reload", async () => {
   });
   const result2 = await second;
   assertEquals(result2.value, "afn: x");
-
-  await host.shutdown();
 });
 
-Deno.test("worker > load failure", async () => {
-  const host = new PluginHost({ module: "./testdata/invalid_plugin.ts" });
-  await host.ensureLoaded();
-  assertEquals(host.status.state, "failed");
-  assertEquals(host.status.loadError?.message, "must fail to load");
+hostTest(
+  "worker > load failure",
+  { module: "./testdata/invalid_plugin.ts" },
+  (host) => {
+    assertEquals(host.status.state, "failed");
+    assertEquals(host.status.loadError?.message, "must fail to load");
+  },
+);
 
-  await host.shutdown();
-});
+// Runs a plugin test case, managing the life cycle of the host.
+function hostTest(
+  name: string,
+  def: Partial<Plugin>,
+  fn: (host: PluginHost, ctl: HostTestController) => Promise<void> | void,
+) {
+  Deno.test(name, async () => {
+    const plugin = { module: "./testdata/test_plugin.ts", ...def };
+    const host = new PluginHost(plugin);
+    const after: (() => void | Promise<void>)[] = [];
+    const ctl: HostTestController = {
+      shutdown: true,
+      after: (fn) => after.push(fn),
+    };
+
+    try {
+      await host.ensureLoaded();
+      await fn(host, ctl);
+    } finally {
+      if (ctl.shutdown) {
+        await host.shutdown();
+      }
+      for (const fn of after) {
+        await fn();
+      }
+    }
+  });
+}
+
+// Provides additional control over a plugin test case.
+interface HostTestController {
+  // Whether or not to automatically shut down the host (true by default).
+  shutdown: boolean;
+
+  // Actions to run after the test.
+  after(fn: () => void | Promise<void>): void;
+}
 
 function assertFetch(
   actual: FetchRecord | undefined,
