@@ -151,17 +151,20 @@ class InvocationContext {
 
     // Call fetch with a customized (re-)initializer including:
     // - A signal that aborts when the invocation is done
-    // - A custom invocation id header
+    // - A custom invocation id header (if there is one)
     // - A body that logs its size
-    let p = fn(input, {
+    init = {
       signal: joinSignals(input.signal, this.#abort.signal),
-      headers: { "Yext-Invocation-ID": this.#cid },
       body: input.body?.pipeThrough(
         new StreamObserver({
           observe: (c) => record.sentBytes += c.byteLength,
         }),
       ),
-    });
+    };
+    if (this.#cid) {
+      init.headers = { "Yext-Invocation-ID": this.#cid };
+    }
+    let p = fn(input, init);
 
     // Turn an abort from an invocation ending into a 408 (Request Timeout) response.
     // This is mostly so that Deno doesn't crash on the unobserved rejection,
