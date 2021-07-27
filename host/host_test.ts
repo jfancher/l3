@@ -238,7 +238,8 @@ function assertFetch(
   actual: FetchRecord | undefined,
   expected: Partial<FetchRecord>,
 ) {
-  const [minDuration, maxDuration] = [1, 50];
+  // CI can be slow, so be permissive even though these should be ~instant.
+  const [minDuration, maxDuration] = [1, 5000];
   assertExists(actual);
   assertObjectMatch(actual!, expected);
 
