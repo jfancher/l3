@@ -1,9 +1,9 @@
 import {
   assert,
   assertEquals,
+  assertExists,
   assertObjectMatch,
   assertThrowsAsync,
-  assertExists,
 } from "https://deno.land/std@0.95.0/testing/asserts.ts";
 import { delay } from "https://deno.land/std@0.95.0/async/mod.ts";
 import { serve } from "https://deno.land/std@0.95.0/http/server.ts";

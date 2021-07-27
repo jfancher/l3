@@ -76,7 +76,7 @@ export interface FetchRecord {
   /** The time at which the request was made. */
   startTime: string;
 
-  /** The time at which the response was received. */
+  /** The time at which the response was received (and its body read). */
   endTime: string;
 
   /** Sent body size. */
