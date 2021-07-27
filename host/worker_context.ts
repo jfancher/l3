@@ -48,7 +48,7 @@ export interface Logger {
   /**
    * Called when a `fetch` has been performed and the response's body has been
    * fully read.
-   * 
+   *
    * If a response body is never read, the fetch will be logged when the call
    * is finalized via `closeInvocationContext`.
    */
