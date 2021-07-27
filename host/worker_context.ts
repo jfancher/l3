@@ -149,9 +149,9 @@ class InvocationContext {
 
     const record = this.#newFetchRecord(input);
 
-    // Call fetch with a customized (re-)initializer:
-    // - A signal that aborts when the invocation is done.
-    // - A custom invocation id header.
+    // Call fetch with a customized (re-)initializer including:
+    // - A signal that aborts when the invocation is done
+    // - A custom invocation id header
     // - A body that logs its size
     let p = fn(input, {
       signal: joinSignals(input.signal, this.#abort.signal),
