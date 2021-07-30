@@ -165,7 +165,10 @@ export class Server {
     // Instead, for the time being respect the custom X-Timeout header.
     const timeout = Number.parseInt(ctx.request.headers.get("X-Timeout") ?? "");
     const ctl = new AbortController();
-    let call = this.#host.invoke(func, arg, { signal: ctl.signal });
+    let call = this.#host.invoke(func, arg, {
+      invocationId: ctx.request.headers.get("Yext-Invocation-ID"),
+      signal: ctl.signal,
+    });
     if (timeout) {
       call = this.#configureTimeout(call, ctl, timeout);
     }

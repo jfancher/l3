@@ -39,8 +39,11 @@ export interface InvokeMessage {
   /** Specifies the kind of the message. */
   kind: "invoke";
 
-  /** A correlation id, used to identify the corresponding `InvokeResult`. */
-  cid: string;
+  /** An opaque token to be passed back with the corresponding `InvokeResult`. */
+  token: string;
+
+  /** A caller-provided identifier for the invocation. */
+  invocationId?: string;
 
   /** The path of the module to load. */
   function: string;
@@ -56,6 +59,6 @@ export interface InvokeResultMessage extends InvokeResult {
   /** Specifies the kind of the message. */
   kind: "invoke";
 
-  /** The correlation id passed in with the `InvokeMessage`. */
-  cid: string;
+  /** The token passed in with the `InvokeMessage`. */
+  token: string;
 }
