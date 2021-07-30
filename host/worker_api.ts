@@ -42,7 +42,7 @@ export interface InvokeMessage {
   /** An opaque token to be passed back with the corresponding `InvokeResult`. */
   token: string;
 
-  /** A caller-provided idetifier for the invocation. */
+  /** A caller-provided identifier for the invocation. */
   invocationId?: string;
 
   /** The path of the module to load. */
