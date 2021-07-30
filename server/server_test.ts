@@ -15,6 +15,7 @@ invokeTest(
     const response = await fetch(`${host}/invoke/up`, {
       method: "POST",
       body: JSON.stringify("str"),
+      headers: { "Yext-Invocation-ID": "custom-invocation-id" },
     });
 
     const body: InvokeResponse = await response.json();

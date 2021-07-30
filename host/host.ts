@@ -94,13 +94,13 @@ export class PluginHost {
       throw new Error("invalid host state");
     }
 
-    const cid = uuidV4.generate();
+    const token = uuidV4.generate();
     const result = deferred<InvokeResult>();
-    this.#invoked.set(cid, result);
+    this.#invoked.set(token, result);
     this.#invocations++;
 
     opts?.signal?.addEventListener("abort", () => {
-      this.#completeInvoke(cid, {
+      this.#completeInvoke(token, {
         error: {
           name: "AbortError",
           message: "Invocation was aborted",
@@ -115,7 +115,8 @@ export class PluginHost {
 
     worker.postMessage({
       kind: "invoke",
-      cid: cid,
+      token: token,
+      invocationId: opts?.invocationId,
       function: func,
       argument: argument,
     });
@@ -132,8 +133,8 @@ export class PluginHost {
   }
 
   /** Resolves an invocation promise and removes it from the in-progress map. */
-  #completeInvoke(cid: string, result: Partial<InvokeResult>) {
-    const p = this.#invoked.get(cid);
+  #completeInvoke(token: string, result: Partial<InvokeResult>) {
+    const p = this.#invoked.get(token);
     if (p) {
       const r: InvokeResult = {
         value: result.value ?? undefined,
@@ -144,7 +145,7 @@ export class PluginHost {
         r.error = result.error;
       }
       p.resolve(r);
-      this.#invoked.delete(cid);
+      this.#invoked.delete(token);
     }
   }
 
@@ -169,8 +170,8 @@ export class PluginHost {
       this.#state = "closed";
       this.#shutdown.resolve();
 
-      for (const cid of this.#invoked.keys()) {
-        this.#completeInvoke(cid, {
+      for (const token of this.#invoked.keys()) {
+        this.#completeInvoke(token, {
           error: {
             name: "TerminateError",
             message: "Worker was terminated",
@@ -280,7 +281,7 @@ export class PluginHost {
           if ("error" in e.data) {
             result.error = e.data.error;
           }
-          this.#completeInvoke(e.data.cid, result);
+          this.#completeInvoke(e.data.token, result);
           return;
         }
       }
@@ -333,6 +334,9 @@ export class PluginHost {
 export interface InvokeOptions {
   /** An signal that can cancel the invocation. */
   signal?: AbortSignal | null;
+
+  /** A caller-supplied correlation id for the invocation. */
+  invocationId?: string | null;
 }
 
 /** Describes loading state and some metrics for a plugin host. */

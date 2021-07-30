@@ -68,7 +68,7 @@ async function load(msg: LoadMessage): Promise<LoadResultMessage> {
 async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
   const result: InvokeResultMessage = {
     kind: "invoke",
-    cid: msg.cid,
+    token: msg.token,
     value: undefined,
     logs: [],
     fetches: [],
@@ -86,7 +86,7 @@ async function invoke(msg: InvokeMessage): Promise<InvokeResultMessage> {
   }
 
   try {
-    openInvocationContext(msg.cid, plugin.globals, {
+    openInvocationContext(msg.invocationId, plugin.globals, {
       fetch: (rec) => result.fetches.push(rec),
     });
     result.value = await Promise.resolve(fn(msg.argument));

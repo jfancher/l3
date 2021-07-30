@@ -3,9 +3,6 @@
 
 import { FetchRecord } from "./result.ts";
 
-// Set on the global object to indicate the current call id.
-const cid = Symbol("cid");
-
 // Overrides a global property.
 type Override<K, T> = (
   key: K,
@@ -21,16 +18,20 @@ let current: InvocationContext | null = null;
  * The context should be closed with `closeInvocationContext` when the current plugin call is
  * finished to perform cleanup, and _must_ be closed before the next call to this function.
  *
- * @param cid The call id
+ * @param invocationId The caller-supplied invocation id
  * @param globals Additional values to add to the global environment
+ * @param logger An event logger
  */
 export function openInvocationContext(
-  cid: string,
+  invocationId?: string,
   globals?: Record<string, unknown>,
   logger?: Logger,
 ) {
-  const ctx = new InvocationContext(cid, globals, logger);
-  ctx.set(); // will throw if previous was not closed, no need to check current
+  if (current) {
+    throw new Error("Invocation context is already active");
+  }
+  const ctx = new InvocationContext(invocationId, globals, logger);
+  ctx.set();
   current = ctx;
 }
 
@@ -57,7 +58,7 @@ export interface Logger {
 
 /** Creates a restricted execution environment for a plugin invocation. */
 class InvocationContext {
-  #cid: string;
+  #invocationId?: string;
   #customGlobals: Record<string, unknown>;
   #logger: Logger;
   #orig: Record<PropertyKey, PropertyDescriptor>;
@@ -68,12 +69,16 @@ class InvocationContext {
   /**
    * Initializes a new invocation context.
    *
-   * @param cid The call id
+   * @param invocationId The caller-supplied invocation id
    * @param globals Additional values to add to the global environment
    * @param logger The event logger
    */
-  constructor(cid: string, globals?: Record<string, unknown>, logger?: Logger) {
-    this.#cid = cid;
+  constructor(
+    invocationId?: string,
+    globals?: Record<string, unknown>,
+    logger?: Logger,
+  ) {
+    this.#invocationId = invocationId;
     this.#customGlobals = globals ?? {};
     this.#logger = logger ?? {};
     this.#orig = {};
@@ -85,11 +90,6 @@ class InvocationContext {
   /** Sets the global environment to the isolated invocation context. */
   set() {
     const env = Object(globalThis);
-    if (env[cid]) {
-      throw new Error(
-        `Cannot reenter context '${this.#cid}' (current: ${env[cid]}).`,
-      );
-    }
 
     const globalProps = Object.getOwnPropertyDescriptors(env);
     const overrides = Object(this.#globals);
@@ -103,7 +103,6 @@ class InvocationContext {
       }
     }
 
-    env[cid] = this.#cid;
     for (const key in this.#customGlobals) {
       if (key in globalProps) {
         throw new Error(`Cannot redefine ${key}.`);
@@ -115,11 +114,6 @@ class InvocationContext {
   /** Finalizes the invocation and restores the global environment. */
   close() {
     const env = Object(globalThis);
-    if (env[cid] !== this.#cid) {
-      throw new Error(
-        `Context '${this.#cid}' not active (current: '${env[cid]}').`,
-      );
-    }
 
     // If there are leftover fetch records (body was never read), log them now.
     for (const record of this.#fetches) {
@@ -129,7 +123,6 @@ class InvocationContext {
     for (const key in this.#customGlobals) {
       delete env[key];
     }
-    delete env[cid];
 
     for (const key in this.#orig) {
       Object.defineProperty(env, key, this.#orig[key]);
@@ -167,8 +160,8 @@ class InvocationContext {
         }),
       ),
     };
-    if (this.#cid) {
-      init.headers = { "Yext-Invocation-ID": this.#cid };
+    if (this.#invocationId) {
+      init.headers = { "Yext-Invocation-ID": this.#invocationId };
     }
     let p = fn(input, init);
 
