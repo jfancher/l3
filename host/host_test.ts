@@ -82,7 +82,12 @@ hostTest("worker > wrap fetch", {}, async (host, ctl) => {
   const port = (srv.listener.addr as Deno.NetAddr).port;
   (async () => {
     for await (const req of srv) {
-      req.respond({ body: `"${req.method} ${req.url}"` });
+      let msg = `${req.method} ${req.url}`;
+      const id = req.headers.get("Yext-Invocation-ID");
+      if (id) {
+        msg += ` [${id}]`;
+      }
+      req.respond({ body: `"${msg}"` });
     }
   })();
   ctl.after(() => srv.close());
@@ -90,11 +95,13 @@ hostTest("worker > wrap fetch", {}, async (host, ctl) => {
   const url = `http://localhost:${port}/test`;
 
   // normal fetch
-  const result1 = await host.invoke("doFetch", url);
+  const result1 = await host.invoke("doFetch", url, {
+    invocationId: "invoke-id",
+  });
   assertEquals(result1.value, [
-    "GET /test?string",
-    "GET /test?url",
-    "CUSTOM /test",
+    "GET /test?string [invoke-id]",
+    "GET /test?url [invoke-id]",
+    "CUSTOM /test [invoke-id]",
   ]);
   assertFetch(result1.fetches?.[0], {
     scheme: "http",
@@ -103,7 +110,7 @@ hostTest("worker > wrap fetch", {}, async (host, ctl) => {
     status: 200,
     statusText: "OK",
     sentBytes: 0,
-    receivedBytes: `"GET /test?string"`.length,
+    receivedBytes: `"GET /test?string [invoke-id]"`.length,
   });
   assertFetch(result1.fetches?.[1], {
     scheme: "http",
@@ -112,7 +119,7 @@ hostTest("worker > wrap fetch", {}, async (host, ctl) => {
     status: 200,
     statusText: "OK",
     sentBytes: 0,
-    receivedBytes: `"GET /test?url"`.length,
+    receivedBytes: `"GET /test?url [invoke-id]"`.length,
   });
   assertFetch(result1.fetches?.[2], {
     scheme: "http",
@@ -121,7 +128,7 @@ hostTest("worker > wrap fetch", {}, async (host, ctl) => {
     status: 200,
     statusText: "OK",
     sentBytes: `${url} body`.length,
-    receivedBytes: `"CUSTOM /test"`.length,
+    receivedBytes: `"CUSTOM /test [invoke-id]"`.length,
   });
 
   // fetch with explicit abort
